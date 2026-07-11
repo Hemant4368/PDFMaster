@@ -55,9 +55,12 @@ final class AnnotationExportImportService {
                 let pageRect = page.bounds(for: .mediaBox)
                 let rectStr = "\(rect.origin.x),\(pageRect.height - rect.origin.y - rect.height),\(rect.width),\(rect.height)"
                 let color = annotation.color
-                let colorStr = "\(Int(color.cgColor.components?[0] ?? 0 * 255)),\(Int(color.cgColor.components?[1] ?? 0 * 255)),\(Int(color.cgColor.components?[2] ?? 0 * 255))"
+                let r = (color.cgColor.components?[0] ?? 0) * 255
+                let g = (color.cgColor.components?[1] ?? 0) * 255
+                let b = (color.cgColor.components?[2] ?? 0) * 255
+                let hex = String(format: "%02X%02X%02X", Int(r), Int(g), Int(b))
                 xfdf += """
-                <annots type="\(annotation.type)" page="\(i)" rect="\(rectStr)" color="#\(String(format: "%02X%02X%02X", Int(color.cgColor.components?[0] ?? 0 * 255), Int(color.cgColor.components?[1] ?? 0 * 255), Int(color.cgColor.components?[2] ?? 0 * 255)))" />
+                <annots type="\(annotation.type ?? "")" page="\(i)" rect="\(rectStr)" color="#\(hex)" />
                 """
             }
         }
@@ -74,7 +77,7 @@ final class AnnotationExportImportService {
             guard let page = document.page(at: i) else { continue }
             for annotation in page.annotations {
                 let rect = annotation.bounds
-                fdf += "<< /Type /Annot /Subtype /\(annotation.type) /Rect [\(rect.origin.x) \(rect.origin.y) \(rect.maxX) \(rect.maxY)] /Page \(i) >>\n"
+                fdf += "<< /Type /Annot /Subtype /\(annotation.type ?? "") /Rect [\(rect.origin.x) \(rect.origin.y) \(rect.maxX) \(rect.maxY)] /Page \(i) >>\n"
             }
         }
         fdf += "] >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"

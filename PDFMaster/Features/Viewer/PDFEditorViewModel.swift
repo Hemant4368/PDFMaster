@@ -2,6 +2,19 @@ import PDFKit
 import PencilKit
 import SwiftUI
 
+enum LinkType: String, CaseIterable, Identifiable {
+    case web   = "Website"
+    case email = "Email"
+    case page  = "Page"
+    var id: String { rawValue }
+}
+
+struct LinkTarget {
+    var type: LinkType = .web
+    var urlString: String = ""
+    var pageIndex: Int = 0
+}
+
 enum EditorMode: String, CaseIterable, Identifiable {
     case view      = "View"
     case annotate  = "Annotate"
@@ -11,6 +24,8 @@ enum EditorMode: String, CaseIterable, Identifiable {
     case signature = "Sign"
     case search    = "Search"
     case redact    = "Redact"
+    case image     = "Image"
+    case link      = "Link"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -22,6 +37,8 @@ enum EditorMode: String, CaseIterable, Identifiable {
         case .signature: "signature"
         case .search:    "magnifyingglass"
         case .redact:    "rectangle.slash"
+        case .image:     "photo"
+        case .link:      "link"
         }
     }
 }
@@ -41,6 +58,9 @@ enum AnnotationSubtool: String, CaseIterable, Identifiable {
     case callout   = "Callout"
     case line      = "Line"
     case arrow     = "Arrow"
+    case polygon   = "Polygon"
+    case polyline  = "Polyline"
+    case measurement = "Measure"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -58,6 +78,9 @@ enum AnnotationSubtool: String, CaseIterable, Identifiable {
         case .callout:      "text.bubble"
         case .line:         "line.diagonal"
         case .arrow:        "arrow.right"
+        case .polygon:      "polygon"
+        case .polyline:     "line.diagonal"
+        case .measurement:  "ruler"
         }
     }
     var isShapeTool: Bool {
@@ -67,6 +90,7 @@ enum AnnotationSubtool: String, CaseIterable, Identifiable {
         }
     }
     var isMarkupTool: Bool { self == .highlight || self == .underline || self == .strikeOut || self == .squiggly }
+    var isMultiPointTool: Bool { self == .polygon || self == .polyline }
     var pdfSubtype: PDFAnnotationSubtype {
         switch self {
         case .highlight:  .highlight
@@ -76,7 +100,7 @@ enum AnnotationSubtool: String, CaseIterable, Identifiable {
         case .note:       .text
         case .rectangle, .roundedRect: .square
         case .circle:     .circle
-        case .line, .arrow: .line
+        case .line, .arrow, .polyline, .measurement: .line
         default:          .square
         }
     }
@@ -176,6 +200,19 @@ final class PDFEditorViewModel: ObservableObject {
     @Published var freeTextStyle = FreeTextStyle()
     @Published var brushType: AnnotationTool = .pencil
 
+    // Image & Link
+    @Published var showImagePicker = false
+    @Published var selectedImage: UIImage?
+    @Published var showLinkPicker = false
+    @Published var linkTarget = LinkTarget()
+    // Measurement
+    @Published var measurementScale: CGFloat = 72
+    @Published var measurementUnit: String = "pt"
+    // Polygon tracking
+    @Published var polygonPoints: [CGPoint] = []
+    // Locking
+    @Published var showLockToggle = false
+
     weak var pdfView: PDFView?
 
     var pendingTapPoint: (CGPoint, PDFPage)?
@@ -194,6 +231,8 @@ final class PDFEditorViewModel: ObservableObject {
         case .view, .signature, .search: .normal
         case .draw: .pencil
         case .annotate where annotationSubtool.isShapeTool: .shapeDraw
+        case .annotate where annotationSubtool.isMultiPointTool: .tapToPlace
+        case .annotate where annotationSubtool == .measurement: .shapeDraw
         case .annotate: .normal
         case .redact: .shapeDraw
         default: .tapToPlace
@@ -283,6 +322,15 @@ final class PDFEditorViewModel: ObservableObject {
             placeStickyNote(at: pagePoint, on: page)
         case .signature:
             placeSignatureStamp(at: pagePoint, on: page)
+        case .image:
+            pendingTapPoint = (pagePoint, page)
+            showImagePicker = true
+        case .link:
+            pendingTapPoint = (pagePoint, page)
+            linkTarget = LinkTarget()
+            showLinkPicker = true
+        case .annotate where annotationSubtool.isMultiPointTool:
+            polygonPoints.append(pagePoint)
         default:
             break
         }
@@ -304,10 +352,42 @@ final class PDFEditorViewModel: ObservableObject {
             return
         }
 
+        if annotationSubtool == .measurement {
+            let annotation = PDFAnnotation(bounds: rect.insetBy(dx: -lineWidth, dy: -lineWidth), forType: .line, withProperties: nil)
+            let inset = lineWidth + 2
+            let w = rect.width, h = rect.height
+            annotation.startPoint = CGPoint(x: inset, y: h / 2)
+            annotation.endPoint = CGPoint(x: max(w - inset, 0), y: h / 2)
+            let border = PDFBorder()
+            border.lineWidth = lineWidth
+            border.dashPattern = dashPattern as? [NSNumber]
+            annotation.border = border
+            annotation.color = color
+            annotation.startLineStyle = .closedArrow
+            annotation.endLineStyle = .closedArrow
+            annotation.interiorColor = color.withAlphaComponent(0.5)
+
+            let pixelLength = hypot(rect.width, rect.height)
+            let scaled = pixelLength / measurementScale
+            let measureText = String(format: "%.2f %@", scaled, measurementUnit)
+            let measureAnnotation = PDFAnnotation(bounds: CGRect(x: rect.midX - 50, y: rect.minY - 20, width: 100, height: 16), forType: .freeText, withProperties: nil)
+            measureAnnotation.contents = measureText
+            measureAnnotation.font = UIFont.boldSystemFont(ofSize: 10)
+            measureAnnotation.fontColor = UIColor(annotationColor)
+            measureAnnotation.color = .clear
+            measureAnnotation.alignment = .center
+            measureAnnotation.isReadOnly = true
+            addAnnotation(measureAnnotation, to: page)
+            addAnnotation(annotation, to: page)
+            return
+        }
+
         if annotationSubtool == .arrow || annotationSubtool == .line {
             let annotation = PDFAnnotation(bounds: rect.insetBy(dx: -lineWidth, dy: -lineWidth), forType: .line, withProperties: nil)
-            annotation.startPoint = CGPoint(x: rect.minX + lineWidth, y: rect.midY)
-            annotation.endPoint = CGPoint(x: rect.maxX - lineWidth, y: rect.midY)
+            let inset = lineWidth + 2
+            let w = rect.width, h = rect.height
+            annotation.startPoint = CGPoint(x: inset, y: h / 2)
+            annotation.endPoint = CGPoint(x: max(w - inset, 0), y: h / 2)
             let border = PDFBorder()
             border.lineWidth = lineWidth
             border.dashPattern = dashPattern as? [NSNumber]
@@ -553,6 +633,77 @@ final class PDFEditorViewModel: ObservableObject {
         return searchResults[searchResultIndex]
     }
 
+    func placeImageAnnotation(_ image: UIImage, at point: CGPoint, on page: PDFPage) {
+        let aspect = image.size.width / image.size.height
+        let w: CGFloat = 200
+        let h = w / aspect
+        let rect = CGRect(x: point.x - w / 2, y: point.y - h / 2, width: w, height: h)
+        let annotation = PDFAnnotation(bounds: rect, forType: .stamp, withProperties: nil)
+        annotation.contents = "__IMAGE__"
+        if let data = image.jpegData(compressionQuality: 0.85) {
+            annotation.setValue(data, forAnnotationKey: .imageData)
+        }
+        annotation.color = UIColor(annotationColor).withAlphaComponent(0.1)
+        let border = PDFBorder()
+        border.lineWidth = 1
+        border.dashPattern = [4, 2]
+        annotation.border = border
+        addAnnotation(annotation, to: page)
+        pendingTapPoint = nil
+    }
+
+    func placeLinkAnnotation(_ target: LinkTarget, at point: CGPoint, on page: PDFPage) {
+        let w: CGFloat = 200, h: CGFloat = 18
+        let rect = CGRect(x: point.x - w / 2, y: point.y - h / 2, width: w, height: h)
+        let annotation = PDFAnnotation(bounds: rect, forType: .link, withProperties: nil)
+        switch target.type {
+        case .web:
+            annotation.contents = target.urlString
+            annotation.url = URL(string: target.urlString)
+        case .email:
+            annotation.contents = "mailto:\(target.urlString)"
+            annotation.url = URL(string: "mailto:\(target.urlString)")
+        case .page:
+            annotation.contents = "Page \(target.pageIndex + 1)"
+            if let document = pdfView?.document, target.pageIndex < document.pageCount {
+                annotation.destination = PDFDestination(page: document.page(at: target.pageIndex)!, at: .zero)
+            }
+        }
+        annotation.color = UIColor(annotationColor).withAlphaComponent(0.3)
+        let border = PDFBorder()
+        border.lineWidth = 0
+        annotation.border = border
+        annotation.shouldDisplay = true
+        addAnnotation(annotation, to: page)
+        pendingTapPoint = nil
+    }
+
+    func completePolygon(on page: PDFPage) {
+        guard polygonPoints.count > 2 else { polygonPoints = []; return }
+        let path = UIBezierPath()
+        path.move(to: polygonPoints[0])
+        for p in polygonPoints.dropFirst() { path.addLine(to: p) }
+        if annotationSubtool == .polygon { path.close() }
+        let bounds = path.bounds
+        let annotation = PDFAnnotation(bounds: bounds, forType: .ink, withProperties: nil)
+        annotation.add(path)
+        annotation.color = UIColor(annotationColor).withAlphaComponent(annotationOpacity)
+        if fillColor != .clear {
+            annotation.interiorColor = UIColor(fillColor).withAlphaComponent(annotationOpacity * 0.3)
+        }
+        let border = PDFBorder()
+        border.lineWidth = lineWidth
+        border.dashPattern = dashPattern as? [NSNumber]
+        annotation.border = border
+        addAnnotation(annotation, to: page)
+        polygonPoints = []
+    }
+
+    func toggleAnnotationLock(_ annotation: PDFAnnotation) {
+        annotation.isReadOnly.toggle()
+        storage.editCount += 1
+    }
+
     func applyRedactions(to document: PDFDocument?) {
         guard let document else { return }
         for i in 0..<document.pageCount {
@@ -577,6 +728,7 @@ final class PDFEditorViewModel: ObservableObject {
     }
 
     func selectAnnotation(_ annotation: PDFAnnotation) {
+        guard !annotation.isReadOnly else { return }
         selectionManager.select(annotation)
         if annotation.type == PDFAnnotationSubtype.text.rawValue {
             noteToEdit = annotation

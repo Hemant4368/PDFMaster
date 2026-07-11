@@ -72,12 +72,20 @@ struct InteractivePDFKitView: UIViewRepresentable {
         selRect.isHidden = true
         gestureOverlay.layer.addSublayer(selRect)
 
+        let resizeHandle = CAShapeLayer()
+        resizeHandle.strokeColor = UIColor.systemBlue.cgColor
+        resizeHandle.fillColor = UIColor.white.cgColor
+        resizeHandle.lineWidth = 2
+        resizeHandle.isHidden = true
+        gestureOverlay.layer.addSublayer(resizeHandle)
+
         let coordinator = context.coordinator
         coordinator.pdfView = pdfView
         coordinator.canvasView = canvas
         coordinator.gestureOverlay = gestureOverlay
         coordinator.shapePreview = shapePreview
         coordinator.selectionRect = selRect
+        coordinator.resizeHandle = resizeHandle
         coordinator.editorViewModel = editorViewModel
 
         NotificationCenter.default.addObserver(
@@ -91,6 +99,11 @@ struct InteractivePDFKitView: UIViewRepresentable {
         tap.delegate = coordinator
         gestureOverlay.addGestureRecognizer(tap)
 
+        let doubleTap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.delegate = coordinator
+        gestureOverlay.addGestureRecognizer(doubleTap)
+
         let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.handlePan(_:)))
         pan.delegate = coordinator
         gestureOverlay.addGestureRecognizer(pan)
@@ -99,6 +112,8 @@ struct InteractivePDFKitView: UIViewRepresentable {
         longPress.delegate = coordinator
         longPress.minimumPressDuration = 0.4
         gestureOverlay.addGestureRecognizer(longPress)
+
+        tap.require(toFail: doubleTap)
 
         context.coordinator.updateMode(editorViewModel.gestureMode, pdfView: pdfView)
         editorViewModel.pdfView = pdfView
@@ -133,6 +148,7 @@ struct InteractivePDFKitView: UIViewRepresentable {
         weak var gestureOverlay: UIView?
         weak var shapePreview: CAShapeLayer?
         weak var selectionRect: CAShapeLayer?
+        weak var resizeHandle: CAShapeLayer?
         var editorViewModel: PDFEditorViewModel?
         private var shapeStart: CGPoint = .zero
         private var lastMode: GestureMode?
@@ -140,6 +156,8 @@ struct InteractivePDFKitView: UIViewRepresentable {
         private var dragStartAnnotationBounds: CGRect?
         private var dragStartPoint: CGPoint = .zero
         private weak var dragAnnotation: PDFAnnotation?
+        private var isResizing = false
+        private var resizeCorner: Int = 0
 
         init(currentPageIndex: Binding<Int>, reloadToken: UUID) {
             _currentPageIndex = currentPageIndex
@@ -215,15 +233,36 @@ struct InteractivePDFKitView: UIViewRepresentable {
                   vm.gestureMode == .normal, let selected = vm.selectionManager.selectedAnnotation,
                   let page = selected.page, pdfView.currentPage === page else {
                 selectionRect?.isHidden = true
+                resizeHandle?.isHidden = true
                 return
             }
             let pageBounds = selected.bounds
             let origin = pdfView.convert(pageBounds.origin, from: page)
             let size = CGSize(width: pageBounds.width * pdfView.scaleFactor,
                               height: pageBounds.height * pdfView.scaleFactor)
-            let viewRect = CGRect(origin: origin, size: size)
-            selRect.path = UIBezierPath(rect: viewRect.insetBy(dx: -4, dy: -4)).cgPath
+            let viewRect = CGRect(origin: origin, size: size).insetBy(dx: -4, dy: -4)
+            selRect.path = UIBezierPath(rect: viewRect).cgPath
             selRect.isHidden = false
+
+            // Resize handles for free-text annotations
+            if selected.type == PDFAnnotationSubtype.freeText.rawValue, let handle = resizeHandle {
+                let handleSize: CGFloat = 10
+                var corners: [CGPoint] = []
+                for dx in [0, 1] {
+                    for dy in [0, 1] {
+                        corners.append(CGPoint(x: viewRect.minX + CGFloat(dx) * viewRect.width - handleSize/2,
+                                                y: viewRect.minY + CGFloat(dy) * viewRect.height - handleSize/2))
+                    }
+                }
+                let handlePath = CGMutablePath()
+                for corner in corners {
+                    handlePath.addRect(CGRect(origin: corner, size: CGSize(width: handleSize, height: handleSize)))
+                }
+                handle.path = handlePath
+                handle.isHidden = false
+            } else {
+                resizeHandle?.isHidden = true
+            }
         }
 
         @objc func pageChanged(_ notification: Notification) {
@@ -253,6 +292,14 @@ struct InteractivePDFKitView: UIViewRepresentable {
             }
         }
 
+        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended, let pdfView, let page = pdfView.currentPage else { return }
+            Task { @MainActor [weak self] in
+                guard let vm = self?.editorViewModel, vm.annotationSubtool.isMultiPointTool && vm.editorMode == .annotate else { return }
+                vm.completePolygon(on: page)
+            }
+        }
+
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
             guard let pdfView else { return }
             let location = gesture.location(in: pdfView)
@@ -260,10 +307,74 @@ struct InteractivePDFKitView: UIViewRepresentable {
             Task { @MainActor [weak self] in
                 guard let self, let vm = editorViewModel else { return }
                 if vm.gestureMode == .normal {
+                    if checkResizeHandleDrag(gesture, pdfView: pdfView, location: location) { return }
                     handleAnnotationDrag(gesture, pdfView: pdfView, location: location)
                 } else {
                     handleShapeDrawPan(gesture, pdfView: pdfView, location: location)
                 }
+            }
+        }
+
+        @MainActor private func checkResizeHandleDrag(_ gesture: UIPanGestureRecognizer, pdfView: PDFView, location: CGPoint) -> Bool {
+            guard let handle = resizeHandle, let vm = editorViewModel, !handle.isHidden,
+                  let page = pdfView.currentPage, let selected = vm.selectionManager.selectedAnnotation else { return false }
+
+            let handleSize: CGFloat = 14
+            let pageBounds = selected.bounds
+            let origin = pdfView.convert(pageBounds.origin, from: page)
+            let size = CGSize(width: pageBounds.width * pdfView.scaleFactor,
+                              height: pageBounds.height * pdfView.scaleFactor)
+            let viewRect = CGRect(origin: origin, size: size)
+            let corners: [CGRect] = [
+                CGRect(x: viewRect.minX - handleSize/2, y: viewRect.minY - handleSize/2, width: handleSize, height: handleSize),
+                CGRect(x: viewRect.maxX - handleSize/2, y: viewRect.minY - handleSize/2, width: handleSize, height: handleSize),
+                CGRect(x: viewRect.minX - handleSize/2, y: viewRect.maxY - handleSize/2, width: handleSize, height: handleSize),
+                CGRect(x: viewRect.maxX - handleSize/2, y: viewRect.maxY - handleSize/2, width: handleSize, height: handleSize)
+            ]
+
+            switch gesture.state {
+            case .began:
+                for (i, corner) in corners.enumerated() {
+                    if corner.contains(location) {
+                        isResizing = true
+                        resizeCorner = i
+                        return true
+                    }
+                }
+                return false
+            case .changed:
+                guard isResizing else { return false }
+                let newBounds = selected.bounds
+                let scale = pdfView.scaleFactor
+                let deltaX = (location.x - corners[resizeCorner].midX) / scale
+                let deltaY = (location.y - corners[resizeCorner].midY) / scale
+                var updatedBounds = newBounds
+                let minW: CGFloat = 40, minH: CGFloat = 14
+                if resizeCorner == 1 || resizeCorner == 3 {
+                    updatedBounds.size.width = max(minW, newBounds.width + deltaX)
+                }
+                if resizeCorner == 2 || resizeCorner == 3 {
+                    updatedBounds.size.height = max(minH, newBounds.height + deltaY)
+                }
+                if resizeCorner == 0 || resizeCorner == 2 {
+                    let newW = max(minW, newBounds.width - deltaX)
+                    updatedBounds.origin.x = newBounds.maxX - newW
+                    updatedBounds.size.width = newW
+                }
+                if resizeCorner == 0 || resizeCorner == 1 {
+                    let newH = max(minH, newBounds.height - deltaY)
+                    updatedBounds.origin.y = newBounds.maxY - newH
+                    updatedBounds.size.height = newH
+                }
+                selected.bounds = updatedBounds
+                updateSelectionHighlight()
+                return true
+            case .ended, .cancelled:
+                isResizing = false
+                if gesture.state == .ended { vm.storage.editCount += 1 }
+                return true
+            default:
+                return false
             }
         }
 
@@ -285,6 +396,9 @@ struct InteractivePDFKitView: UIViewRepresentable {
                 menu.addAction(UIAlertAction(title: "Duplicate", style: .default) { _ in
                     weakVM.selectionManager.duplicateSelected()
                     weakVM.storage.editCount += 1
+                })
+                menu.addAction(UIAlertAction(title: tappedAnnotation.isReadOnly ? "Unlock" : "Lock", style: .default) { _ in
+                    weakVM.toggleAnnotationLock(tappedAnnotation)
                 })
                 menu.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
                     if let page = tappedAnnotation.page {
@@ -364,6 +478,7 @@ struct InteractivePDFKitView: UIViewRepresentable {
         private func annotation(at pagePoint: CGPoint, on page: PDFPage) -> PDFAnnotation? {
             let tolerance: CGFloat = 15
             for annotation in page.annotations {
+                if annotation.isReadOnly { continue }
                 var hitBounds = annotation.bounds
                 if annotation.type == PDFAnnotationSubtype.text.rawValue || annotation.type == PDFAnnotationSubtype.freeText.rawValue {
                     hitBounds = hitBounds.insetBy(dx: -tolerance, dy: -tolerance)
@@ -398,6 +513,9 @@ struct InteractivePDFKitView: UIViewRepresentable {
 extension InteractivePDFKitView.Coordinator: UIGestureRecognizerDelegate {
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         if gestureRecognizer is UILongPressGestureRecognizer || other is UILongPressGestureRecognizer {
+            return false
+        }
+        if gestureRecognizer is UITapGestureRecognizer && other is UITapGestureRecognizer {
             return false
         }
         return true

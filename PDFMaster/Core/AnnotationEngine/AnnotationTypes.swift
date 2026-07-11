@@ -205,4 +205,5 @@ extension PDFAnnotation {
 
 extension PDFAnnotationKey {
     static let UUID = PDFAnnotationKey(rawValue: "UUID")
+    static let imageData = PDFAnnotationKey(rawValue: "ImageData")
 }

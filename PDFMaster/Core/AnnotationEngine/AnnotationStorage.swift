@@ -11,7 +11,7 @@ final class AnnotationStorage: ObservableObject {
     func addAnnotation(_ annotation: PDFAnnotation, to page: PDFPage) {
         page.addAnnotation(annotation)
         undoManager.recordAdd(annotation, on: page)
-        annotationCount = page.document?.pageCount ?? 0
+        annotationCount += 1
         editCount += 1
     }
 
@@ -43,6 +43,6 @@ final class AnnotationStorage: ObservableObject {
     }
 
     func annotationTypeString(_ annotation: PDFAnnotation) -> String {
-        (annotation.type as? String) ?? "\(annotation.type)"
+        annotation.type ?? "unknown"
     }
 }

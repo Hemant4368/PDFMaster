@@ -11,6 +11,8 @@ struct PDFEditorToolbar: View {
     let onReorder: () -> Void
     let onMarkupApply: () -> Void
     let onApplyRedactions: () -> Void
+    let onCalibrate: () -> Void
+    let onCompletePolygon: () -> Void
 
     @State private var showModePicker = false
 
@@ -81,6 +83,44 @@ struct PDFEditorToolbar: View {
                 }
                 .background(.bar.opacity(0.8))
                 Divider()
+
+                // Multi-point subtoolbar
+                if viewModel.annotationSubtool.isMultiPointTool {
+                    HStack(spacing: 12) {
+                        Text("Tap to place points, double-tap to finish")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button { viewModel.polygonPoints = [] } label: {
+                            Label("Clear", systemImage: "xmark.circle")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.bar.opacity(0.8))
+                    Divider()
+                }
+
+                // Measurement subtoolbar
+                if viewModel.annotationSubtool == .measurement {
+                    HStack(spacing: 12) {
+                        Text("\(viewModel.measurementScale, specifier: "%.0f") px/\(viewModel.measurementUnit)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Button("Calibrate") { onCalibrate() }
+                            .font(.caption.weight(.medium))
+                            .buttonStyle(.plain)
+                            .foregroundStyle(AppTheme.primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.bar.opacity(0.8))
+                    Divider()
+                }
             }
 
             // Draw toolbar
@@ -157,6 +197,34 @@ struct PDFEditorToolbar: View {
                 Divider()
             }
 
+            // Image toolbar
+            if viewModel.editorMode == .image {
+                HStack(spacing: 12) {
+                    Text("Tap on the PDF to place an image")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.bar.opacity(0.8))
+                Divider()
+            }
+
+            // Link toolbar
+            if viewModel.editorMode == .link {
+                HStack(spacing: 12) {
+                    Text("Tap on the PDF to place a link")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.bar.opacity(0.8))
+                Divider()
+            }
+
             // Bottom actions
             HStack(spacing: 0) {
                 toolbarButton("Add Page", "doc.badge.plus", action: onAddPage)
@@ -167,6 +235,11 @@ struct PDFEditorToolbar: View {
 
                 if viewModel.editorMode == .annotate && viewModel.annotationSubtool.isMarkupTool {
                     toolbarButton("Apply", "checkmark.circle.fill") { onMarkupApply() }
+                        .foregroundStyle(AppTheme.primary)
+                }
+
+                if viewModel.editorMode == .annotate && viewModel.annotationSubtool.isMultiPointTool {
+                    toolbarButton("Finish", "checkmark.circle.fill") { onCompletePolygon() }
                         .foregroundStyle(AppTheme.primary)
                 }
 

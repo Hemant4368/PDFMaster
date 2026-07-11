@@ -2,6 +2,7 @@ import PDFKit
 import PencilKit
 import SwiftData
 import SwiftUI
+import PhotosUI
 
 struct PDFViewerView: View {
     let document: DocumentRecord
@@ -21,6 +22,14 @@ struct PDFViewerView: View {
     @State private var reorderIndexes: [Int] = []
     @State private var showDeletePageConfirmation = false
     @State private var errorMessage: String?
+    @State private var loadError: String?
+    @State private var showImagePicker = false
+    @State private var showLinkSheet = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showCalibration = false
+    @State private var calibratePoints: (CGPoint, CGPoint)?
+    @State private var calibrateKnownLength: String = ""
+    @State private var showBackWarning = false
     @StateObject private var editorVM = PDFEditorViewModel()
 
     var body: some View {
@@ -45,7 +54,9 @@ struct PDFViewerView: View {
                         onDeletePage: { showDeletePageConfirmation = true },
                         onReorder: prepareReorder,
                         onMarkupApply: { editorVM.applyMarkupFromSelection(); markEdited() },
-                        onApplyRedactions: { editorVM.applyRedactions(to: pdfDocument); markEdited() }
+                        onApplyRedactions: { editorVM.applyRedactions(to: pdfDocument); markEdited() },
+                        onCalibrate: { showCalibration = true },
+                        onCompletePolygon: { completePolygon() }
                     )
 
                     if hasUnsavedChanges {
@@ -54,6 +65,12 @@ struct PDFViewerView: View {
                     }
                 }
                 .animation(.spring(response: 0.3, dampingFraction: 0.86), value: hasUnsavedChanges)
+            } else if let loadError {
+                ContentUnavailableView(
+                    "Failed to Load PDF",
+                    systemImage: "doc.richtext",
+                    description: Text(loadError)
+                )
             } else {
                 ProgressView()
                     .task { await loadDocument() }
@@ -61,10 +78,20 @@ struct PDFViewerView: View {
         }
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button { editorVM.showSidebar = true } label: {
-                    Image(systemName: "list.bullet.rectangle")
+                HStack(spacing: 2) {
+                    Button {
+                        if hasUnsavedChanges { showBackWarning = true }
+                        else { dismiss() }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    Button { editorVM.showSidebar = true } label: {
+                        Image(systemName: "list.bullet.rectangle")
+                    }
                 }
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -78,6 +105,38 @@ struct PDFViewerView: View {
                     Image(systemName: "square.and.arrow.up")
                 }
             }
+        }
+        .confirmationDialog("Unsaved Changes", isPresented: $showBackWarning, titleVisibility: .visible) {
+            Button("Discard Changes", role: .destructive) { dismiss() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You have unsaved changes. Discard them?")
+        }
+        .photosPicker(isPresented: $showImagePicker, selection: $photoItem, matching: .images)
+        .onChange(of: photoItem) { _, newItem in
+            guard let newItem else { return }
+            Task {
+                guard let data = try? await newItem.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data),
+                      let pending = editorVM.pendingTapPoint else { return }
+                editorVM.placeImageAnnotation(image, at: pending.0, on: pending.1)
+                markEdited()
+            }
+        }
+        .sheet(isPresented: $showLinkSheet) {
+            linkSheet
+        }
+        .alert("Calibrate Measurement", isPresented: $showCalibration) {
+            TextField("Known length", text: $calibrateKnownLength)
+                .keyboardType(.decimalPad)
+            Button("Set") {
+                if let val = Double(calibrateKnownLength), val > 0 {
+                    editorVM.measurementScale = 72 / val
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Enter the real-world length for 72 points (1 inch):")
         }
         .sheet(item: $shareURL) { ShareSheet(items: [$0]) }
         .sheet(isPresented: $editorVM.showSignatureSheet) {
@@ -168,6 +227,42 @@ struct PDFViewerView: View {
         .background(Color(.secondarySystemBackground))
     }
 
+    private var linkSheet: some View {
+        NavigationStack {
+            Form {
+                Picker("Type", selection: $editorVM.linkTarget.type) {
+                    ForEach(LinkType.allCases) { type in
+                        Text(type.rawValue).tag(type)
+                    }
+                }
+                TextField("URL / Email", text: $editorVM.linkTarget.urlString)
+                    .keyboardType(.URL)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                if editorVM.linkTarget.type == .page {
+                    Stepper("Page: \(editorVM.linkTarget.pageIndex + 1)",
+                            value: $editorVM.linkTarget.pageIndex, in: 0...(pdfDocument?.pageCount ?? 1) - 1)
+                }
+            }
+            .navigationTitle("Link Target")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { Button("Cancel") { editorVM.pendingTapPoint = nil; showLinkSheet = false } }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Add") {
+                        if let (point, page) = editorVM.pendingTapPoint {
+                            editorVM.placeLinkAnnotation(editorVM.linkTarget, at: point, on: page)
+                            markEdited()
+                        }
+                        showLinkSheet = false
+                    }
+                    .disabled(editorVM.linkTarget.urlString.isEmpty && editorVM.linkTarget.type != .page)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
     private var reorderSheet: some View {
         NavigationStack {
             List {
@@ -197,10 +292,19 @@ struct PDFViewerView: View {
         }
     }
 
+    private func completePolygon() {
+        guard let pdfDocument, let page = pdfDocument.page(at: currentPageIndex) else { return }
+        editorVM.completePolygon(on: page)
+        markEdited()
+    }
+
     private func loadDocument() async {
         let fileURL = await FileStorageService.shared.url(for: document.fileName)
         url = fileURL
         pdfDocument = PDFDocument(url: fileURL)
+        if pdfDocument == nil {
+            loadError = "The document could not be opened. It may be corrupted or in an unsupported format."
+        }
         loadThumbnails()
     }
 
@@ -221,7 +325,7 @@ struct PDFViewerView: View {
         }
         guard let page = PDFPage(image: image) else { return }
         pdfDocument.insert(page, at: min(currentPageIndex + 1, pdfDocument.pageCount))
-        currentPageIndex = min(currentPageIndex + 1, pdfDocument.pageCount - 1)
+        currentPageIndex = max(0, min(currentPageIndex + 1, pdfDocument.pageCount - 1))
         markEdited()
     }
 
@@ -253,7 +357,7 @@ struct PDFViewerView: View {
         }
         let deletedIndex = min(max(currentPageIndex, 0), pdfDocument.pageCount - 1)
         pdfDocument.removePage(at: deletedIndex)
-        currentPageIndex = min(deletedIndex, pdfDocument.pageCount - 1)
+        currentPageIndex = max(0, min(deletedIndex, pdfDocument.pageCount - 1))
         markEdited()
     }
 
