@@ -1,30 +1,107 @@
-//
-//  ShareViewController.swift
-//  PDFMasterShareExtension
-//
-//  Created by Hemant Patel on 12/07/26.
-//
-
+import SwiftUI
 import UIKit
-import Social
+import UniformTypeIdentifiers
 
-class ShareViewController: SLComposeServiceViewController {
+final class ShareViewController: UIViewController {
 
-    override func isContentValid() -> Bool {
-        // Do validation of contentText and/or NSExtensionContext attachments here
-        return true
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
     }
 
-    override func didSelectPost() {
-        // This is called after the user selects Post. Do the upload of contentText and/or NSExtensionContext attachments.
-    
-        // Inform the host that we're done, so it un-blocks its UI. Note: Alternatively you could call super's -didSelectPost, which will similarly complete the extension context.
-        self.extensionContext!.completeRequest(returningItems: [], completionHandler: nil)
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        loadIncomingItem()
     }
 
-    override func configurationItems() -> [Any]! {
-        // To add configuration options via table cells at the bottom of the sheet, return an array of SLComposeSheetConfigurationItem here.
-        return []
+    // MARK: – Load shared file
+
+    private func loadIncomingItem() {
+        guard let item = extensionContext?.inputItems.first as? NSExtensionItem,
+              let provider = item.attachments?.first else { cancel(); return }
+
+        // Try types in priority order
+        let typeOrder = [
+            UTType.pdf.identifier,
+            "org.openxmlformats.wordprocessingml.document",
+            "com.microsoft.word.doc",
+            "org.openxmlformats.presentationml.presentation",
+            "com.microsoft.powerpoint.ppt",
+            "org.openxmlformats.spreadsheetml.sheet",
+            "com.microsoft.excel.xls",
+            "public.plain-text",
+            "public.rtf",
+            UTType.image.identifier,
+            UTType.data.identifier,
+        ]
+
+        guard let typeID = typeOrder.first(where: { provider.hasItemConformingToTypeIdentifier($0) }) else {
+            cancel(); return
+        }
+
+        provider.loadFileRepresentation(forTypeIdentifier: typeID) { [weak self] url, error in
+            guard let self, let url, error == nil,
+                  let data = try? Data(contentsOf: url) else { self?.cancel(); return }
+            let filename = url.lastPathComponent
+            let fileType = ShareFileType.infer(from: url)
+            DispatchQueue.main.async { self.showPicker(data: data, filename: filename, fileType: fileType) }
+        }
     }
 
+    // MARK: – Show SwiftUI picker
+
+    private func showPicker(data: Data, filename: String, fileType: ShareFileType) {
+        guard !fileType.tools.isEmpty else { cancel(); return }
+
+        let pickerView = ShareToolPickerView(
+            filename: filename,
+            fileType: fileType,
+            onSelect: { [weak self] toolKey in self?.finish(data: data, filename: filename, toolKey: toolKey) },
+            onCancel: { [weak self] in self?.cancel() }
+        )
+
+        let hvc = UIHostingController(rootView: pickerView)
+        hvc.view.backgroundColor = .clear
+        addChild(hvc)
+        view.addSubview(hvc.view)
+        hvc.view.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            hvc.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hvc.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            hvc.view.topAnchor.constraint(equalTo: view.topAnchor),
+            hvc.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        hvc.didMove(toParent: self)
+    }
+
+    // MARK: – Save and open main app
+
+    private func finish(data: Data, filename: String, toolKey: String) {
+        let appGroupID = "group.com.hp.app.imageTopdf"
+
+        // Write file to shared container
+        if let dir = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: appGroupID)?
+            .appendingPathComponent("SharedFiles", isDirectory: true) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? data.write(to: dir.appendingPathComponent(filename), options: .atomic)
+        }
+
+        // Persist pending state in shared UserDefaults
+        let ud = UserDefaults(suiteName: appGroupID)
+        ud?.set(filename, forKey: "pendingShareFilename")
+        ud?.set(toolKey,  forKey: "pendingShareTool")
+        ud?.synchronize()
+
+        // Open main app — toolKey is PDFTool.rawValue e.g. "Compress PDF"
+        let safe = toolKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? toolKey
+        if let url = URL(string: "pdfmaster://shareopen?tool=\(safe)") {
+            extensionContext?.open(url, completionHandler: nil)
+        }
+        extensionContext?.completeRequest(returningItems: nil)
+    }
+
+    private func cancel() {
+        extensionContext?.completeRequest(returningItems: nil)
+    }
 }
