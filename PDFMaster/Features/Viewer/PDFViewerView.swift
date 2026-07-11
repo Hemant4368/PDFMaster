@@ -17,7 +17,6 @@ struct PDFViewerView: View {
     @State private var showThumbnails = false
     @State private var hasUnsavedChanges = false
     @State private var isSaving = false
-    @State private var signatureCanvas = PKCanvasView()
     @State private var showReorderSheet = false
     @State private var reorderIndexes: [Int] = []
     @State private var showDeletePageConfirmation = false
@@ -45,7 +44,8 @@ struct PDFViewerView: View {
                         onAddPage: addPage,
                         onDeletePage: { showDeletePageConfirmation = true },
                         onReorder: prepareReorder,
-                        onMarkupApply: { editorVM.applyMarkupFromSelection(); markEdited() }
+                        onMarkupApply: { editorVM.applyMarkupFromSelection(); markEdited() },
+                        onApplyRedactions: { editorVM.applyRedactions(to: pdfDocument); markEdited() }
                     )
 
                     if hasUnsavedChanges {
@@ -62,6 +62,11 @@ struct PDFViewerView: View {
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { editorVM.showSidebar = true } label: {
+                    Image(systemName: "list.bullet.rectangle")
+                }
+            }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button { showThumbnails.toggle(); loadThumbnails() } label: {
                     Image(systemName: "square.grid.2x2")
@@ -75,7 +80,9 @@ struct PDFViewerView: View {
             }
         }
         .sheet(item: $shareURL) { ShareSheet(items: [$0]) }
-        .sheet(isPresented: $editorVM.showSignatureSheet) { signatureSheet }
+        .sheet(isPresented: $editorVM.showSignatureSheet) {
+            PDFSignatureSheet(viewModel: editorVM)
+        }
         .sheet(isPresented: $showReorderSheet) { reorderSheet }
         .sheet(isPresented: $editorVM.showInspector) {
             PDFAnnotationInspector(viewModel: editorVM)
@@ -85,6 +92,14 @@ struct PDFViewerView: View {
         }
         .sheet(isPresented: $editorVM.showSearchPanel) {
             PDFSearchPanel(viewModel: editorVM)
+        }
+        .sheet(isPresented: $editorVM.showSidebar) {
+            AnnotationSidebar(viewModel: editorVM)
+        }
+        .sheet(isPresented: $editorVM.showNoteEditor) {
+            if let annotation = editorVM.noteToEdit {
+                AnnotationNoteEditor(viewModel: editorVM, annotation: annotation)
+            }
         }
         .alert("Add Text", isPresented: $editorVM.showTextInput) {
             TextField("Text", text: $editorVM.textInputValue)
@@ -153,30 +168,6 @@ struct PDFViewerView: View {
         .background(Color(.secondarySystemBackground))
     }
 
-    private var signatureSheet: some View {
-        NavigationStack {
-            VStack(spacing: 18) {
-                PencilCanvasView(canvasView: $signatureCanvas)
-                    .frame(height: 240)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .padding()
-                PrimaryButton(title: "Apply Signature", systemImage: "signature") {
-                    applySignature()
-                    editorVM.showSignatureSheet = false
-                }
-                .padding(.horizontal)
-                Spacer()
-            }
-            .navigationTitle("Signature")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                Button("Cancel") { editorVM.showSignatureSheet = false }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-
     private var reorderSheet: some View {
         NavigationStack {
             List {
@@ -232,30 +223,6 @@ struct PDFViewerView: View {
         pdfDocument.insert(page, at: min(currentPageIndex + 1, pdfDocument.pageCount))
         currentPageIndex = min(currentPageIndex + 1, pdfDocument.pageCount - 1)
         markEdited()
-    }
-
-    private func applySignature() {
-        guard let pdfDocument, let data = pdfDocument.dataRepresentation(), let signature = signatureImage() else { return }
-        do {
-            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("viewer-sign-\(UUID().uuidString).pdf")
-            try data.write(to: tempURL, options: .atomic)
-            let page = pdfDocument.page(at: currentPageIndex)
-            let bounds = page?.bounds(for: .mediaBox) ?? CGRect(x: 0, y: 0, width: 612, height: 792)
-            let rect = CGRect(x: bounds.midX - 110, y: bounds.maxY - 190, width: 220, height: 82)
-            let signedData = try PDFProcessingServiceSync.sign(url: tempURL, signature: signature, pageIndex: currentPageIndex, rect: rect)
-            self.pdfDocument = PDFDocument(data: signedData)
-            try? FileManager.default.removeItem(at: tempURL)
-            signatureCanvas.drawing = PKDrawing()
-            markEdited()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func signatureImage() -> UIImage? {
-        let bounds = signatureCanvas.drawing.bounds.insetBy(dx: -18, dy: -18)
-        guard !bounds.isEmpty else { return nil }
-        return signatureCanvas.drawing.image(from: bounds, scale: UIScreen.main.scale)
     }
 
     private func prepareReorder() {
@@ -317,29 +284,5 @@ struct PDFViewerView: View {
 
     private func goToPage(_ index: Int) {
         currentPageIndex = index
-    }
-}
-
-private enum PDFProcessingServiceSync {
-    static func sign(url: URL, signature: UIImage, pageIndex: Int, rect: CGRect) throws -> Data {
-        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
-        let output = NSMutableData()
-        UIGraphicsBeginPDFContextToData(output, .zero, nil)
-        for index in 0..<document.pageCount {
-            guard let page = document.page(at: index) else { continue }
-            let bounds = page.bounds(for: .mediaBox)
-            UIGraphicsBeginPDFPageWithInfo(bounds, nil)
-            guard let context = UIGraphicsGetCurrentContext() else { continue }
-            context.saveGState()
-            context.translateBy(x: 0, y: bounds.height)
-            context.scaleBy(x: 1, y: -1)
-            page.draw(with: .mediaBox, to: context)
-            context.restoreGState()
-            if index == pageIndex {
-                signature.draw(in: rect)
-            }
-        }
-        UIGraphicsEndPDFContext()
-        return output as Data
     }
 }

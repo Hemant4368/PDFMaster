@@ -10,6 +10,7 @@ struct PDFEditorToolbar: View {
     let onDeletePage: () -> Void
     let onReorder: () -> Void
     let onMarkupApply: () -> Void
+    let onApplyRedactions: () -> Void
 
     @State private var showModePicker = false
 
@@ -107,6 +108,28 @@ struct PDFEditorToolbar: View {
                     .foregroundStyle(.primary)
 
                     Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.bar.opacity(0.8))
+                Divider()
+            }
+
+            // Redact toolbar
+            if viewModel.editorMode == .redact {
+                HStack(spacing: 12) {
+                    Text("Drag to mark areas for redaction")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        onApplyRedactions()
+                    } label: {
+                        Label("Apply", systemImage: "checkmark.circle.fill")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)

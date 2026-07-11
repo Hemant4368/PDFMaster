@@ -64,11 +64,20 @@ struct InteractivePDFKitView: UIViewRepresentable {
         shapePreview.isHidden = true
         gestureOverlay.layer.addSublayer(shapePreview)
 
+        let selRect = CAShapeLayer()
+        selRect.strokeColor = UIColor.systemBlue.cgColor
+        selRect.fillColor = UIColor.clear.cgColor
+        selRect.lineWidth = 2
+        selRect.lineDashPattern = [4, 3]
+        selRect.isHidden = true
+        gestureOverlay.layer.addSublayer(selRect)
+
         let coordinator = context.coordinator
         coordinator.pdfView = pdfView
         coordinator.canvasView = canvas
         coordinator.gestureOverlay = gestureOverlay
         coordinator.shapePreview = shapePreview
+        coordinator.selectionRect = selRect
         coordinator.editorViewModel = editorViewModel
 
         NotificationCenter.default.addObserver(
@@ -86,6 +95,11 @@ struct InteractivePDFKitView: UIViewRepresentable {
         pan.delegate = coordinator
         gestureOverlay.addGestureRecognizer(pan)
 
+        let longPress = UILongPressGestureRecognizer(target: coordinator, action: #selector(Coordinator.handleLongPress(_:)))
+        longPress.delegate = coordinator
+        longPress.minimumPressDuration = 0.4
+        gestureOverlay.addGestureRecognizer(longPress)
+
         context.coordinator.updateMode(editorViewModel.gestureMode, pdfView: pdfView)
         editorViewModel.pdfView = pdfView
 
@@ -101,6 +115,10 @@ struct InteractivePDFKitView: UIViewRepresentable {
         }
         context.coordinator.editorViewModel = editorViewModel
         context.coordinator.updateMode(editorViewModel.gestureMode, pdfView: pdfView)
+        context.coordinator.updateSelectionHighlight()
+        if editorViewModel.gestureMode == .pencil {
+            context.coordinator.configureCanvasTool()
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -114,16 +132,21 @@ struct InteractivePDFKitView: UIViewRepresentable {
         weak var canvasView: PKCanvasView?
         weak var gestureOverlay: UIView?
         weak var shapePreview: CAShapeLayer?
+        weak var selectionRect: CAShapeLayer?
         var editorViewModel: PDFEditorViewModel?
         private var shapeStart: CGPoint = .zero
         private var lastMode: GestureMode?
+        private var isDraggingAnnotation = false
+        private var dragStartAnnotationBounds: CGRect?
+        private var dragStartPoint: CGPoint = .zero
+        private weak var dragAnnotation: PDFAnnotation?
 
         init(currentPageIndex: Binding<Int>, reloadToken: UUID) {
             _currentPageIndex = currentPageIndex
             self.reloadToken = reloadToken
         }
 
-        func updateMode(_ mode: GestureMode, pdfView: PDFView) {
+        @MainActor func updateMode(_ mode: GestureMode, pdfView: PDFView) {
             let previousMode = lastMode
             lastMode = mode
 
@@ -134,7 +157,7 @@ struct InteractivePDFKitView: UIViewRepresentable {
             switch mode {
             case .normal:
                 pdfView.isUserInteractionEnabled = true
-                gestureOverlay?.isUserInteractionEnabled = false
+                gestureOverlay?.isUserInteractionEnabled = true
                 canvasView?.isUserInteractionEnabled = false
                 shapePreview?.isHidden = true
             case .tapToPlace:
@@ -142,38 +165,177 @@ struct InteractivePDFKitView: UIViewRepresentable {
                 gestureOverlay?.isUserInteractionEnabled = true
                 canvasView?.isUserInteractionEnabled = false
                 shapePreview?.isHidden = true
+                selectionRect?.isHidden = true
             case .shapeDraw:
                 pdfView.isUserInteractionEnabled = false
                 gestureOverlay?.isUserInteractionEnabled = true
                 canvasView?.isUserInteractionEnabled = false
                 shapePreview?.isHidden = false
+                selectionRect?.isHidden = true
             case .pencil:
                 pdfView.isUserInteractionEnabled = false
                 gestureOverlay?.isUserInteractionEnabled = false
                 canvasView?.isUserInteractionEnabled = true
                 canvasView?.drawingPolicy = .pencilOnly
                 shapePreview?.isHidden = true
+                selectionRect?.isHidden = true
+                configureCanvasTool()
             }
+            updateSelectionHighlight()
+        }
+
+        @MainActor func configureCanvasTool() {
+            guard let canvasView, let vm = editorViewModel else { return }
+            if vm.brushType == .eraser {
+                canvasView.tool = PKEraserTool(.bitmap)
+                canvasView.drawingPolicy = .anyInput
+            } else if vm.brushType == .lasso {
+                canvasView.tool = PKLassoTool()
+                canvasView.drawingPolicy = .anyInput
+            } else {
+                let inkType: PKInkingTool.InkType
+                switch vm.brushType {
+                case .pencil:          inkType = .pencil
+                case .marker:          inkType = .marker
+                case .highlighterPen:  inkType = .marker
+                case .brush:           inkType = .pen
+                default:               inkType = .pen
+                }
+                let color = UIColor(vm.annotationColor)
+                let width = vm.lineWidth * (inkType == .pencil ? 2 : 1)
+                let alpha = vm.brushType == .highlighterPen ? CGFloat(0.4) : CGFloat(1.0)
+                let ink = PKInkingTool(inkType, color: color.withAlphaComponent(alpha), width: width)
+                canvasView.tool = ink
+                canvasView.drawingPolicy = inkType == .pencil ? .pencilOnly : .anyInput
+            }
+        }
+
+        @MainActor func updateSelectionHighlight() {
+            guard let selRect = selectionRect, let pdfView, let vm = editorViewModel,
+                  vm.gestureMode == .normal, let selected = vm.selectionManager.selectedAnnotation,
+                  let page = selected.page, pdfView.currentPage === page else {
+                selectionRect?.isHidden = true
+                return
+            }
+            let pageBounds = selected.bounds
+            let origin = pdfView.convert(pageBounds.origin, from: page)
+            let size = CGSize(width: pageBounds.width * pdfView.scaleFactor,
+                              height: pageBounds.height * pdfView.scaleFactor)
+            let viewRect = CGRect(origin: origin, size: size)
+            selRect.path = UIBezierPath(rect: viewRect.insetBy(dx: -4, dy: -4)).cgPath
+            selRect.isHidden = false
         }
 
         @objc func pageChanged(_ notification: Notification) {
             guard let pdfView, let page = pdfView.currentPage, let index = pdfView.document?.index(for: page) else { return }
             currentPageIndex = index
+            Task { @MainActor [weak self] in
+                self?.editorViewModel?.selectionManager.deselectAll()
+            }
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended, let pdfView, let page = pdfView.currentPage else { return }
             let location = gesture.location(in: pdfView)
             let pagePoint = pdfView.convert(location, to: page)
+
             Task { @MainActor [weak self] in
-                self?.editorViewModel?.handleTap(at: pagePoint, on: page)
+                guard let self, let vm = editorViewModel else { return }
+                if vm.gestureMode == .normal {
+                    if let tappedAnnotation = annotation(at: pagePoint, on: page) {
+                        vm.selectAnnotation(tappedAnnotation)
+                    } else {
+                        vm.selectionManager.deselectAll()
+                    }
+                    return
+                }
+                vm.handleTap(at: pagePoint, on: page)
             }
         }
 
         @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
-            guard let pdfView, let preview = shapePreview else { return }
+            guard let pdfView else { return }
             let location = gesture.location(in: pdfView)
 
+            Task { @MainActor [weak self] in
+                guard let self, let vm = editorViewModel else { return }
+                if vm.gestureMode == .normal {
+                    handleAnnotationDrag(gesture, pdfView: pdfView, location: location)
+                } else {
+                    handleShapeDrawPan(gesture, pdfView: pdfView, location: location)
+                }
+            }
+        }
+
+        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+            guard gesture.state == .began, let pdfView, let page = pdfView.currentPage else { return }
+            let location = gesture.location(in: pdfView)
+            let pagePoint = pdfView.convert(location, to: page)
+
+            Task { @MainActor [weak self] in
+                guard let self, let vm = editorViewModel, let overlay = gestureOverlay else { return }
+                guard let tappedAnnotation = annotation(at: pagePoint, on: page) else { return }
+                vm.selectAnnotation(tappedAnnotation)
+
+                let menu = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+                let weakVM = vm
+                menu.addAction(UIAlertAction(title: "Edit Style", style: .default) { _ in
+                    weakVM.showInspector = true
+                })
+                menu.addAction(UIAlertAction(title: "Duplicate", style: .default) { _ in
+                    weakVM.selectionManager.duplicateSelected()
+                    weakVM.storage.editCount += 1
+                })
+                menu.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
+                    if let page = tappedAnnotation.page {
+                        weakVM.removeAnnotation(tappedAnnotation, from: page)
+                    }
+                })
+                menu.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+
+                if let windowScene = overlay.window?.windowScene,
+                   let rootVC = windowScene.keyWindow?.rootViewController {
+                    menu.popoverPresentationController?.sourceView = overlay
+                    menu.popoverPresentationController?.sourceRect = CGRect(origin: location, size: .zero)
+                    rootVC.present(menu, animated: true)
+                }
+            }
+        }
+
+        @MainActor private func handleAnnotationDrag(_ gesture: UIPanGestureRecognizer, pdfView: PDFView, location: CGPoint) {
+            switch gesture.state {
+            case .began:
+                guard let page = pdfView.currentPage else { return }
+                let pagePoint = pdfView.convert(location, to: page)
+                if let ann = annotation(at: pagePoint, on: page) {
+                    isDraggingAnnotation = true
+                    dragAnnotation = ann
+                    dragStartAnnotationBounds = ann.bounds
+                    dragStartPoint = pagePoint
+                    editorViewModel?.selectAnnotation(ann)
+                }
+            case .changed:
+                guard isDraggingAnnotation, let ann = dragAnnotation,
+                      let page = pdfView.currentPage, let startBounds = dragStartAnnotationBounds else { return }
+                let pagePoint = pdfView.convert(location, to: page)
+                let dx = pagePoint.x - dragStartPoint.x
+                let dy = pagePoint.y - dragStartPoint.y
+                ann.bounds = startBounds.offsetBy(dx: dx, dy: dy)
+                updateSelectionHighlight()
+            case .ended, .cancelled:
+                isDraggingAnnotation = false
+                dragAnnotation = nil
+                dragStartAnnotationBounds = nil
+                if gesture.state == .ended {
+                    editorViewModel?.storage.editCount += 1
+                }
+            default:
+                break
+            }
+        }
+
+        @MainActor private func handleShapeDrawPan(_ gesture: UIPanGestureRecognizer, pdfView: PDFView, location: CGPoint) {
+            guard let preview = shapePreview else { return }
             switch gesture.state {
             case .began:
                 shapeStart = location
@@ -181,8 +343,7 @@ struct InteractivePDFKitView: UIViewRepresentable {
             case .changed:
                 let rect = normalizedRect(from: shapeStart, to: location)
                 preview.path = UIBezierPath(rect: rect).cgPath
-                Task { @MainActor [weak self] in
-                    guard let vm = self?.editorViewModel else { return }
+                if let vm = editorViewModel {
                     preview.strokeColor = UIColor(vm.annotationColor).cgColor
                     preview.lineWidth = vm.lineWidth
                 }
@@ -194,19 +355,31 @@ struct InteractivePDFKitView: UIViewRepresentable {
                 let w = abs(endPoint.x - startPoint.x)
                 let h = abs(endPoint.y - startPoint.y)
                 let rect = CGRect(x: min(startPoint.x, endPoint.x), y: min(startPoint.y, endPoint.y), width: w, height: h)
-                Task { @MainActor [weak self] in
-                    self?.editorViewModel?.handleShapeDrag(rect: rect, on: page)
-                }
+                editorViewModel?.handleShapeDrag(rect: rect, on: page)
             default:
                 preview.isHidden = true
             }
+        }
+
+        private func annotation(at pagePoint: CGPoint, on page: PDFPage) -> PDFAnnotation? {
+            let tolerance: CGFloat = 15
+            for annotation in page.annotations {
+                var hitBounds = annotation.bounds
+                if annotation.type == PDFAnnotationSubtype.text.rawValue || annotation.type == PDFAnnotationSubtype.freeText.rawValue {
+                    hitBounds = hitBounds.insetBy(dx: -tolerance, dy: -tolerance)
+                }
+                if hitBounds.contains(pagePoint) {
+                    return annotation
+                }
+            }
+            return nil
         }
 
         private func normalizedRect(from: CGPoint, to: CGPoint) -> CGRect {
             CGRect(x: min(from.x, to.x), y: min(from.y, to.y), width: abs(to.x - from.x), height: abs(to.y - from.y))
         }
 
-        private func bakeCanvasDrawing() {
+        @MainActor private func bakeCanvasDrawing() {
             guard let canvasView, let pdfView, canvasView.drawing.bounds.isEmpty == false else { return }
             let drawing = canvasView.drawing
             canvasView.drawing = PKDrawing()
@@ -217,15 +390,16 @@ struct InteractivePDFKitView: UIViewRepresentable {
                 return pdfView.convert(inPDFView, to: page)
             }
 
-            Task { @MainActor [weak self] in
-                self?.editorViewModel?.bakeDrawing(drawing, canvasToPageTransform: canvasToPage)
-            }
+            editorViewModel?.bakeDrawing(drawing, canvasToPageTransform: canvasToPage)
         }
     }
 }
 
 extension InteractivePDFKitView.Coordinator: UIGestureRecognizerDelegate {
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-        true
+        if gestureRecognizer is UILongPressGestureRecognizer || other is UILongPressGestureRecognizer {
+            return false
+        }
+        return true
     }
 }
