@@ -11,6 +11,7 @@ private struct ImageEntry: Identifiable {
 struct ImageToPDFView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var selectedItems: [PhotosPickerItem] = []
+    @State private var showFilePicker = false
     @State private var entries: [ImageEntry] = []
     @State private var title = "Images PDF"
     @State private var quality: PDFQuality = .balanced
@@ -27,10 +28,16 @@ struct ImageToPDFView: View {
         Form {
             Section {
                 PhotosPicker(selection: $selectedItems, matching: .images) {
-                    Label("Select Images", systemImage: "photo.on.rectangle.angled")
+                    Label("From Photos", systemImage: "photo.on.rectangle.angled")
                 }
-            } header: { Text("Images") } footer: {
-                if entries.isEmpty { Text("Choose one or more photos to convert.") }
+                Button {
+                    showFilePicker = true
+                } label: {
+                    Label("From Files App", systemImage: "folder")
+                        .foregroundStyle(AppTheme.primary)
+                }
+            } header: { Text("Add Images") } footer: {
+                Text("Supports PNG, JPEG, HEIC, TIFF, BMP, WebP and more.")
             }
 
             if !entries.isEmpty {
@@ -95,8 +102,13 @@ struct ImageToPDFView: View {
         }
         .navigationTitle("Image to PDF")
         .onChange(of: selectedItems) { _, newItems in loadImages(newItems) }
+        .sheet(isPresented: $showFilePicker) {
+            DocumentPickerView(contentTypes: [.image], allowsMultipleSelection: true) { urls in
+                loadFromFiles(urls)
+            }
+        }
         .navigationDestination(item: $savedDocument) { PDFViewerView(document: $0) }
-        .overlay { if isWorking { LoadingOverlay(title: "Building PDF") } }
+        .overlay { if isWorking { LoadingOverlay(title: "Converting to PDF") } }
         .alert("Image to PDF", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
@@ -157,6 +169,22 @@ struct ImageToPDFView: View {
                 }
             }
             entries = loaded
+            savedParts = []
+            savedDocument = nil
+        }
+    }
+
+    private func loadFromFiles(_ urls: [URL]) {
+        var loaded: [ImageEntry] = []
+        for url in urls {
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            if let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
+                loaded.append(ImageEntry(image: img))
+            }
+        }
+        if !loaded.isEmpty {
+            entries.append(contentsOf: loaded)
             savedParts = []
             savedDocument = nil
         }

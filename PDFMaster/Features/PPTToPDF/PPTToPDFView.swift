@@ -8,7 +8,7 @@ struct PPTToPDFView: View {
     var body: some View {
         Form {
             Section("Input") {
-                Button(sourceURL?.lastPathComponent ?? "Choose PowerPoint (.pptx)") {
+                Button(sourceURL?.lastPathComponent ?? "Choose PowerPoint (.ppt, .pptx)") {
                     showPicker = true
                 }
             }
@@ -25,7 +25,7 @@ struct PPTToPDFView: View {
         }
         .navigationTitle("PowerPoint to PDF")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(contentTypes: [.pptx], allowsMultipleSelection: false) {
+            DocumentPickerView(contentTypes: [.ppt, .pptx], allowsMultipleSelection: false) {
                 sourceURL = $0.first
             }
         }

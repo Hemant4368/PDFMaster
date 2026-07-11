@@ -8,7 +8,7 @@ struct WordToPDFView: View {
     var body: some View {
         Form {
             Section("Input") {
-                Button(sourceURL?.lastPathComponent ?? "Choose Word Document (.docx)") {
+                Button(sourceURL?.lastPathComponent ?? "Choose Word Document (.doc, .docx)") {
                     showPicker = true
                 }
             }
@@ -25,7 +25,7 @@ struct WordToPDFView: View {
         }
         .navigationTitle("Word to PDF")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(contentTypes: [.docx], allowsMultipleSelection: false) {
+            DocumentPickerView(contentTypes: [.doc, .docx], allowsMultipleSelection: false) {
                 sourceURL = $0.first
             }
         }

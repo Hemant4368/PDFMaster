@@ -219,77 +219,140 @@ struct QLPreviewControllerView: UIViewControllerRepresentable {
     }
 }
 
+// MARK: — WebPreviewView
+
+struct WebPreviewView: UIViewRepresentable {
+    let urlString: String
+    let screenSize: HTMLScreenSize
+    let refreshTrigger: UUID
+
+    func makeUIView(context: Context) -> WKWebView {
+        let wv = WKWebView(frame: .zero)
+        wv.navigationDelegate = context.coordinator
+        wv.allowsBackForwardNavigationGestures = true
+        return wv
+    }
+
+    func updateUIView(_ wv: WKWebView, context: Context) {
+        let agent = screenSize.width > 500
+            ? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
+            : "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+        wv.customUserAgent = agent
+        let key = urlString + refreshTrigger.uuidString
+        guard key != context.coordinator.lastKey,
+              let url = URL(string: urlString), !urlString.isEmpty, urlString != "https://" else { return }
+        context.coordinator.lastKey = key
+        wv.load(URLRequest(url: url))
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    class Coordinator: NSObject, WKNavigationDelegate { var lastKey = "" }
+}
+
 // MARK: — HTMLPDFRenderer (WKWebView → PDF Data)
 
 @MainActor
 final class HTMLPDFRenderer: NSObject {
     private var continuation: CheckedContinuation<Data, Error>?
     private var webView: WKWebView?
+    private var options = RenderOptions()
 
-    static func render(htmlString: String? = nil, pageURL: URL? = nil) async throws -> Data {
-        let renderer = HTMLPDFRenderer()
-        return try await renderer.start(htmlString: htmlString, pageURL: pageURL)
+    struct RenderOptions {
+        var viewportWidth: CGFloat = 1440
+        var pageSize: HTMLPageSize = .a4
+        var oneLongPage: Bool = false
+        var orientation: PDFPageOrientation = .portrait
+        var margin: PDFMarginSize = .none
+        var blockAds: Bool = false
+        var removePopups: Bool = false
+    }
+
+    static func render(
+        htmlString: String? = nil, pageURL: URL? = nil,
+        options: RenderOptions = RenderOptions()
+    ) async throws -> Data {
+        let r = HTMLPDFRenderer(); r.options = options
+        return try await r.start(htmlString: htmlString, pageURL: pageURL)
     }
 
     private func start(htmlString: String?, pageURL: URL?) async throws -> Data {
-        return try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-            let wv = WKWebView(frame: CGRect(x: 0, y: 0, width: 595, height: 842))
+        return try await withCheckedThrowingContinuation { cont in
+            self.continuation = cont
+            let cfg = WKWebViewConfiguration()
+            let uc = WKUserContentController()
+            if options.blockAds {
+                uc.addUserScript(WKUserScript(source: Self.adBlockCSS, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
+            }
+            if options.removePopups {
+                uc.addUserScript(WKUserScript(source: Self.popupBlockCSS, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
+            }
+            cfg.userContentController = uc
+            let wv = WKWebView(frame: CGRect(x: 0, y: 0, width: options.viewportWidth, height: 842), configuration: cfg)
+            if options.viewportWidth > 500 {
+                wv.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
+            }
             wv.navigationDelegate = self
             self.webView = wv
-
-            if let htmlString {
-                wv.loadHTMLString(htmlString, baseURL: nil)
-            } else if let pageURL {
-                wv.load(URLRequest(url: pageURL))
-            } else {
-                continuation.resume(throwing: URLError(.badURL))
-                self.continuation = nil
-            }
+            if let html = htmlString { wv.loadHTMLString(html, baseURL: nil) }
+            else if let url = pageURL { wv.load(URLRequest(url: url)) }
+            else { cont.resume(throwing: URLError(.badURL)); self.continuation = nil }
         }
     }
 
-    private func handleFinish(webView: WKWebView) {
-        let w: CGFloat = 595.28, h: CGFloat = 841.89
-        let paper = CGRect(x: 0, y: 0, width: w, height: h)
-        let printable = CGRect(x: 20, y: 20, width: w - 40, height: h - 40)
-        let renderer = UIPrintPageRenderer()
-        renderer.addPrintFormatter(webView.viewPrintFormatter(), startingAtPageAt: 0)
-        renderer.setValue(NSValue(cgRect: paper), forKey: "paperRect")
-        renderer.setValue(NSValue(cgRect: printable), forKey: "printableRect")
-        renderer.prepare(forDrawingPages: NSRange(location: 0, length: renderer.numberOfPages))
-        let pdfData = NSMutableData()
-        UIGraphicsBeginPDFContextToData(pdfData, paper, nil)
-        for i in 0..<renderer.numberOfPages {
-            UIGraphicsBeginPDFPage()
-            renderer.drawPage(at: i, in: UIGraphicsGetPDFContextBounds())
+    private func handleFinish(wv: WKWebView) {
+        Task { @MainActor in
+            var paper = options.pageSize.paperRect(orientation: options.orientation)
+            if options.oneLongPage,
+               let h = try? await wv.evaluateJavaScript("document.documentElement.scrollHeight") as? CGFloat,
+               h > 0 {
+                paper = CGRect(origin: .zero, size: CGSize(width: paper.width, height: h))
+            }
+            let m = options.margin.points
+            let printable = paper.insetBy(dx: m, dy: m)
+            let renderer = UIPrintPageRenderer()
+            renderer.addPrintFormatter(wv.viewPrintFormatter(), startingAtPageAt: 0)
+            renderer.setValue(NSValue(cgRect: paper), forKey: "paperRect")
+            renderer.setValue(NSValue(cgRect: printable), forKey: "printableRect")
+            renderer.prepare(forDrawingPages: NSRange(location: 0, length: renderer.numberOfPages))
+            let pdfData = NSMutableData()
+            UIGraphicsBeginPDFContextToData(pdfData, paper, nil)
+            for i in 0..<renderer.numberOfPages {
+                UIGraphicsBeginPDFPage()
+                renderer.drawPage(at: i, in: UIGraphicsGetPDFContextBounds())
+            }
+            UIGraphicsEndPDFContext()
+            finish(result: pdfData.length > 0 ? .success(pdfData as Data) : .failure(PDFProcessingError.writeFailed))
         }
-        UIGraphicsEndPDFContext()
-        finish(result: (pdfData as Data).count > 0
-            ? .success(pdfData as Data)
-            : .failure(PDFProcessingError.writeFailed))
     }
 
     private func finish(result: Result<Data, Error>) {
         switch result {
-        case .success(let data): continuation?.resume(returning: data)
-        case .failure(let error): continuation?.resume(throwing: error)
+        case .success(let d): continuation?.resume(returning: d)
+        case .failure(let e): continuation?.resume(throwing: e)
         }
-        continuation = nil
-        webView?.navigationDelegate = nil
-        webView = nil
+        continuation = nil; webView?.navigationDelegate = nil; webView = nil
     }
+
+    private static let adBlockCSS = """
+    var s=document.createElement('style');
+    s.textContent='[class*="ad"],[id*="ad"],[class*="banner"],[class*="sponsor"],ins.adsbygoogle,.ads,.ad-container{display:none!important}';
+    document.documentElement.appendChild(s);
+    """
+
+    private static let popupBlockCSS = """
+    var s=document.createElement('style');
+    s.textContent='*[style*="position:fixed"],*[style*="position: fixed"],*[style*="position:sticky"],*[style*="position: sticky"]{display:none!important}body{overflow:visible!important}';
+    document.documentElement.appendChild(s);
+    """
 }
 
 extension HTMLPDFRenderer: WKNavigationDelegate {
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        Task { @MainActor in self.handleFinish(webView: webView) }
+        Task { @MainActor in self.handleFinish(wv: webView) }
     }
-
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         Task { @MainActor in self.finish(result: .failure(error)) }
     }
-
     nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         Task { @MainActor in self.finish(result: .failure(error)) }
     }

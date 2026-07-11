@@ -151,16 +151,71 @@ struct EmptyStateView: View {
 struct LoadingOverlay: View {
     let title: String
 
+    @State private var spinning = false
+    @State private var pulsing = false
+    @State private var dotCount = 0
+
+    private static let subtitles = [
+        "Please wait…",
+        "This may take a moment…",
+        "Almost done…",
+        "Processing your document…",
+    ]
+    @State private var subtitleIndex = 0
+
     var body: some View {
         ZStack {
-            Color.black.opacity(0.18).ignoresSafeArea()
-            VStack(spacing: 14) {
-                ProgressView()
-                    .tint(AppTheme.primary)
-                Text(title)
-                    .font(.headline)
+            Color.black.opacity(0.32).ignoresSafeArea()
+            VStack(spacing: 20) {
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.primary.opacity(0.08))
+                        .frame(width: 80, height: 80)
+                        .scaleEffect(pulsing ? 1.18 : 1)
+                        .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: pulsing)
+
+                    Circle()
+                        .stroke(AppTheme.primary.opacity(0.18), lineWidth: 5)
+                        .frame(width: 62, height: 62)
+
+                    Circle()
+                        .trim(from: 0, to: 0.72)
+                        .stroke(AppTheme.primary, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                        .frame(width: 62, height: 62)
+                        .rotationEffect(.degrees(spinning ? 360 : 0))
+                        .animation(.linear(duration: 0.9).repeatForever(autoreverses: false), value: spinning)
+
+                    Image(systemName: "doc.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(AppTheme.primary)
+                }
+
+                VStack(spacing: 6) {
+                    Text(title)
+                        .font(.headline)
+                        .multilineTextAlignment(.center)
+                    Text(Self.subtitles[subtitleIndex])
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .id(subtitleIndex)
+                        .animation(.easeInOut(duration: 0.4), value: subtitleIndex)
+                }
             }
-            .premiumCard()
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
+        }
+        .task {
+            spinning = true
+            pulsing = true
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2.2))
+                withAnimation {
+                    subtitleIndex = (subtitleIndex + 1) % Self.subtitles.count
+                }
+            }
         }
     }
 }

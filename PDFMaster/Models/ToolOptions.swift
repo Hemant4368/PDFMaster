@@ -85,6 +85,50 @@ enum PDFMarginSize: String, CaseIterable, Identifiable {
     var points: CGFloat { switch self { case .none: 0; case .small: 18; case .big: 36 } }
 }
 
+enum HTMLScreenSize: String, CaseIterable, Identifiable {
+    case yourScreen  = "Your screen"
+    case desktopHD   = "Desktop HD (1920px)"
+    case desktop     = "Desktop (1440px)"
+    case tablet      = "Tablet (768px)"
+    case mobile      = "Mobile (320px)"
+    var id: String { rawValue }
+    var width: CGFloat {
+        switch self {
+        case .yourScreen: return UIScreen.main.bounds.width
+        case .desktopHD:  return 1920
+        case .desktop:    return 1440
+        case .tablet:     return 768
+        case .mobile:     return 320
+        }
+    }
+}
+
+enum HTMLPageSize: String, CaseIterable, Identifiable {
+    case a3       = "A3 (297×420 mm)"
+    case a4       = "A4 (297×210 mm)"
+    case a5       = "A5 (148×210 mm)"
+    case usLetter = "US Letter (216×279 mm)"
+    var id: String { rawValue }
+
+    func paperRect(orientation: PDFPageOrientation) -> CGRect {
+        let base: CGSize
+        switch self {
+        case .a3:       base = CGSize(width: 841.89, height: 1190.55)
+        case .a4:       base = CGSize(width: 595.28, height: 841.89)
+        case .a5:       base = CGSize(width: 419.53, height: 595.28)
+        case .usLetter: base = CGSize(width: 612, height: 792)
+        }
+        switch orientation {
+        case .portrait:
+            let s = base.width <= base.height ? base : CGSize(width: base.height, height: base.width)
+            return CGRect(origin: .zero, size: s)
+        case .landscape:
+            let s = base.width >= base.height ? base : CGSize(width: base.height, height: base.width)
+            return CGRect(origin: .zero, size: s)
+        }
+    }
+}
+
 enum PageNumberPosition: String, CaseIterable, Identifiable {
     case bottomCenter = "Bottom Center"
     case bottomLeft   = "Bottom Left"
