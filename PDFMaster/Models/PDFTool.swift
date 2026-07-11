@@ -46,6 +46,8 @@ enum PDFTool: String, CaseIterable, Identifiable {
     case pptToPDF       = "PowerPoint to PDF"
     case excelToPDF     = "Excel to PDF"
     case htmlToPDF      = "HTML to PDF"
+    case txtToPDF       = "Text to PDF"
+    case rtfToPDF       = "RTF to PDF"
 
     // CONVERT FROM PDF
     case pdfToImage     = "PDF to Image"
@@ -82,7 +84,7 @@ enum PDFTool: String, CaseIterable, Identifiable {
             return .organize
         case .compress, .repair, .ocr:
             return .optimize
-        case .imageToPDF, .wordToPDF, .pptToPDF, .excelToPDF, .htmlToPDF:
+        case .imageToPDF, .wordToPDF, .pptToPDF, .excelToPDF, .htmlToPDF, .txtToPDF, .rtfToPDF:
             return .convertTo
         case .pdfToImage, .pdfToWord, .pdfToPPT, .pdfToExcel, .pdfToPDFA:
             return .convertFrom
@@ -116,6 +118,8 @@ enum PDFTool: String, CaseIterable, Identifiable {
         case .pptToPDF:       "play.rectangle"
         case .excelToPDF:     "tablecells"
         case .htmlToPDF:      "globe"
+        case .txtToPDF:       "doc.plaintext"
+        case .rtfToPDF:       "doc.richtext"
         // Convert From PDF
         case .pdfToImage:     "photo.stack"
         case .pdfToWord:      "doc.text"

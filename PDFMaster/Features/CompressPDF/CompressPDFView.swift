@@ -4,6 +4,7 @@ import SwiftUI
 
 struct CompressPDFView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var shareInbox: ShareInbox
     @State private var sourceURL: URL?
     @State private var showPicker = false
     @State private var quality: PDFQuality = .low
@@ -44,6 +45,7 @@ struct CompressPDFView: View {
             }
         }
         .navigationTitle("Compress PDF")
+        .task { if let url = shareInbox.consumeURL(for: .compress) { sourceURL = url } }
         .sheet(isPresented: $showPicker) {
             PDFSourcePickerSheet { urls in
                 sourceURL = urls.first

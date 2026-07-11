@@ -4,6 +4,7 @@ import SwiftUI
 
 struct OCRToolView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var shareInbox: ShareInbox
     @State private var sourceURL: URL?
     @State private var showPicker = false
     @State private var showLanguagePicker = false
@@ -110,6 +111,7 @@ struct OCRToolView: View {
             }
         }
         .navigationTitle("OCR Scanner")
+        .task { if let url = shareInbox.consumeURL(for: .ocr) { sourceURL = url } }
         .sheet(isPresented: $showPicker) {
             PDFSourcePickerSheet { urls in
                 sourceURL = urls.first

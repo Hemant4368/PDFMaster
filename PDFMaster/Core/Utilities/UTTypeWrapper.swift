@@ -12,6 +12,7 @@ struct UTTypeWrapper: Hashable {
     static let docx       = UTTypeWrapper(type: UTType(filenameExtension: "docx") ?? .data)
     static let ppt        = UTTypeWrapper(type: UTType(filenameExtension: "ppt") ?? .data)
     static let pptx       = UTTypeWrapper(type: UTType(filenameExtension: "pptx") ?? .data)
+    static let xls        = UTTypeWrapper(type: UTType(filenameExtension: "xls") ?? .data)
     static let xlsx       = UTTypeWrapper(type: UTType(filenameExtension: "xlsx") ?? .data)
     static let markdown   = UTTypeWrapper(type: UTType(filenameExtension: "md") ?? .plainText)
 }

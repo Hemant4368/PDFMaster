@@ -4,6 +4,7 @@ import SwiftUI
 
 struct RotatePDFView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var shareInbox: ShareInbox
     @State private var sourceURL: URL?
     @State private var showPicker = false
     @State private var pageCount = 0
@@ -69,6 +70,7 @@ struct RotatePDFView: View {
             }
         }
         .navigationTitle("Rotate PDF")
+        .task { if let url = shareInbox.consumeURL(for: .rotatePDF) { sourceURL = url } }
         .sheet(isPresented: $showPicker) {
             PDFSourcePickerSheet { urls in
                 sourceURL = urls.first

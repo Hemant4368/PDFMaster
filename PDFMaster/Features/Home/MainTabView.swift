@@ -3,7 +3,7 @@ import SwiftUI
 import SwiftUI
 
 struct MainTabView: View {
-    
+    @EnvironmentObject private var shareInbox: ShareInbox
     @State private var selectedTab: Tab = .files
     @State private var showScanner = false
     
@@ -136,6 +136,22 @@ struct MainTabView: View {
             .ignoresSafeArea(.keyboard)
             .fullScreenCover(isPresented: $showScanner) {
                 ScannerFlowView()
+            }
+            .sheet(item: $shareInbox.pendingTool) { tool in
+                NavigationStack {
+                    ToolRouterView(tool: tool)
+                        .environmentObject(shareInbox)
+                        .navigationTitle(tool.rawValue)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("Done") {
+                                    shareInbox.pendingTool = nil
+                                    shareInbox.pendingURL = nil
+                                }
+                            }
+                        }
+                }
             }
         }
     }

@@ -10,6 +10,7 @@ private struct ImageEntry: Identifiable {
 
 struct ImageToPDFView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var shareInbox: ShareInbox
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var showFilePicker = false
     @State private var entries: [ImageEntry] = []
@@ -101,6 +102,13 @@ struct ImageToPDFView: View {
             }
         }
         .navigationTitle("Image to PDF")
+        .task {
+            if let url = shareInbox.consumeURL(for: .imageToPDF),
+               let data = try? Data(contentsOf: url),
+               let img = UIImage(data: data) {
+                entries = [ImageEntry(image: img)]
+            }
+        }
         .onChange(of: selectedItems) { _, newItems in loadImages(newItems) }
         .sheet(isPresented: $showFilePicker) {
             DocumentPickerView(contentTypes: [.image], allowsMultipleSelection: true) { urls in

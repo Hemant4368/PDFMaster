@@ -4,6 +4,7 @@ import SwiftUI
 
 struct WatermarkToolView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var shareInbox: ShareInbox
     @State private var sourceURL: URL?
     @State private var showPicker = false
     @State private var options = WatermarkOptions()
@@ -45,6 +46,7 @@ struct WatermarkToolView: View {
             }
         }
         .navigationTitle("Watermark")
+        .task { if let url = shareInbox.consumeURL(for: .watermark) { sourceURL = url } }
         .sheet(isPresented: $showPicker) {
             PDFSourcePickerSheet { sourceURL = $0.first }
         }

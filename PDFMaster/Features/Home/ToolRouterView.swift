@@ -22,6 +22,8 @@ struct ToolRouterView: View {
         case .pptToPDF:     PPTToPDFView()
         case .excelToPDF:   ExcelToPDFView()
         case .htmlToPDF:    HTMLToPDFView()
+        case .txtToPDF:     TxtToPDFView()
+        case .rtfToPDF:     RtfToPDFView()
         // CONVERT FROM PDF
         case .pdfToImage:   PDFToImageView()
         case .pdfToWord:    PDFToWordView()

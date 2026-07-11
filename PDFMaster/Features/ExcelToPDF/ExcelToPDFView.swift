@@ -8,7 +8,7 @@ struct ExcelToPDFView: View {
     var body: some View {
         Form {
             Section("Input") {
-                Button(sourceURL?.lastPathComponent ?? "Choose Excel Spreadsheet (.xlsx)") {
+                Button(sourceURL?.lastPathComponent ?? "Choose Excel Spreadsheet (.xls, .xlsx)") {
                     showPicker = true
                 }
             }
@@ -25,7 +25,7 @@ struct ExcelToPDFView: View {
         }
         .navigationTitle("Excel to PDF")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(contentTypes: [.xlsx], allowsMultipleSelection: false) {
+            DocumentPickerView(contentTypes: [.xls, .xlsx], allowsMultipleSelection: false) {
                 sourceURL = $0.first
             }
         }

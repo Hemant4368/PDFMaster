@@ -7,13 +7,41 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3D56A9413002E42500AB2B1D /* PDFMasterShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3D56A9373002E42500AB2B1D /* PDFMasterShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4A1000010000000000000001 /* PDFKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A1000010000000000000002 /* PDFKit.framework */; };
 		4A1000010000000000000003 /* Vision.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A1000010000000000000004 /* Vision.framework */; };
 		4A1000010000000000000005 /* VisionKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A1000010000000000000006 /* VisionKit.framework */; };
 		4A1000010000000000000007 /* PencilKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A1000010000000000000008 /* PencilKit.framework */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		3D56A93F3002E42500AB2B1D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4A1000010000000000000019 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3D56A9363002E42500AB2B1D;
+			remoteInfo = PDFMasterShareExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		3D56A9463002E42500AB2B1D /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				3D56A9413002E42500AB2B1D /* PDFMasterShareExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		3D56A9373002E42500AB2B1D /* PDFMasterShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PDFMasterShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D56A9493002E47F00AB2B1D /* PDF Master AI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "PDF Master AI.entitlements"; sourceTree = "<group>"; };
+		3D56A94B3002E54700AB2B1D /* PDF-Master-AI-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "PDF-Master-AI-Info.plist"; sourceTree = "<group>"; };
 		4A1000010000000000000002 /* PDFKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PDFKit.framework; path = System/Library/Frameworks/PDFKit.framework; sourceTree = SDKROOT; };
 		4A1000010000000000000004 /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
 		4A1000010000000000000006 /* VisionKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = VisionKit.framework; path = System/Library/Frameworks/VisionKit.framework; sourceTree = SDKROOT; };
@@ -21,11 +49,29 @@
 		4A1000010000000000000009 /* PDF Master AI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "PDF Master AI.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		3D56A9423002E42500AB2B1D /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 3D56A9363002E42500AB2B1D /* PDFMasterShareExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		3D56A9383002E42500AB2B1D /* PDFMasterShareExtension */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (3D56A9423002E42500AB2B1D /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = PDFMasterShareExtension; sourceTree = "<group>"; };
 		4A1000010000000000000010 /* PDFMaster */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = PDFMaster; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		3D56A9343002E42500AB2B1D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4A1000010000000000000011 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -43,7 +89,10 @@
 		4A1000010000000000000012 = {
 			isa = PBXGroup;
 			children = (
+				3D56A94B3002E54700AB2B1D /* PDF-Master-AI-Info.plist */,
+				3D56A9493002E47F00AB2B1D /* PDF Master AI.entitlements */,
 				4A1000010000000000000010 /* PDFMaster */,
+				3D56A9383002E42500AB2B1D /* PDFMasterShareExtension */,
 				4A1000010000000000000013 /* Frameworks */,
 				4A1000010000000000000014 /* Products */,
 			);
@@ -64,6 +113,7 @@
 			isa = PBXGroup;
 			children = (
 				4A1000010000000000000009 /* PDF Master AI.app */,
+				3D56A9373002E42500AB2B1D /* PDFMasterShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -71,6 +121,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		3D56A9363002E42500AB2B1D /* PDFMasterShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3D56A9433002E42500AB2B1D /* Build configuration list for PBXNativeTarget "PDFMasterShareExtension" */;
+			buildPhases = (
+				3D56A9333002E42500AB2B1D /* Sources */,
+				3D56A9343002E42500AB2B1D /* Frameworks */,
+				3D56A9353002E42500AB2B1D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				3D56A9383002E42500AB2B1D /* PDFMasterShareExtension */,
+			);
+			name = PDFMasterShareExtension;
+			packageProductDependencies = (
+			);
+			productName = PDFMasterShareExtension;
+			productReference = 3D56A9373002E42500AB2B1D /* PDFMasterShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		4A1000010000000000000015 /* PDF Master AI */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 4A1000010000000000000016 /* Build configuration list for PBXNativeTarget "PDF Master AI" */;
@@ -78,10 +150,12 @@
 				4A1000010000000000000017 /* Sources */,
 				4A1000010000000000000011 /* Frameworks */,
 				4A1000010000000000000018 /* Resources */,
+				3D56A9463002E42500AB2B1D /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				3D56A9403002E42500AB2B1D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				4A1000010000000000000010 /* PDFMaster */,
@@ -100,9 +174,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1600;
+				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
+					3D56A9363002E42500AB2B1D = {
+						CreatedOnToolsVersion = 26.2;
+					};
 					4A1000010000000000000015 = {
 						CreatedOnToolsVersion = 16.0;
 					};
@@ -123,11 +200,19 @@
 			projectRoot = "";
 			targets = (
 				4A1000010000000000000015 /* PDF Master AI */,
+				3D56A9363002E42500AB2B1D /* PDFMasterShareExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		3D56A9353002E42500AB2B1D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4A1000010000000000000018 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -138,6 +223,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		3D56A9333002E42500AB2B1D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4A1000010000000000000017 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -147,7 +239,88 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		3D56A9403002E42500AB2B1D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3D56A9363002E42500AB2B1D /* PDFMasterShareExtension */;
+			targetProxy = 3D56A93F3002E42500AB2B1D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		3D56A9443002E42500AB2B1D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_ENTITLEMENTS = PDFMasterShareExtension/PDFMasterShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = D3L96X2NB7;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PDFMasterShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PDFMasterShareExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hp.app.imageTopdf.import;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3D56A9453002E42500AB2B1D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_ENTITLEMENTS = PDFMasterShareExtension/PDFMasterShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = D3L96X2NB7;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = PDFMasterShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = PDFMasterShareExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hp.app.imageTopdf.import;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		4A1000010000000000000021 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -259,11 +432,13 @@
 		4A1000010000000000000023 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "PDF Master AI.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = D3L96X2NB7;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "PDF-Master-AI-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "PDF Master AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "PDF Master AI uses the camera to scan documents into PDF files.";
@@ -289,11 +464,13 @@
 		4A1000010000000000000024 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "PDF Master AI.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = D3L96X2NB7;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "PDF-Master-AI-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "PDF Master AI";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "PDF Master AI uses the camera to scan documents into PDF files.";
@@ -319,6 +496,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		3D56A9433002E42500AB2B1D /* Build configuration list for PBXNativeTarget "PDFMasterShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3D56A9443002E42500AB2B1D /* Debug */,
+				3D56A9453002E42500AB2B1D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		4A1000010000000000000016 /* Build configuration list for PBXNativeTarget "PDF Master AI" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

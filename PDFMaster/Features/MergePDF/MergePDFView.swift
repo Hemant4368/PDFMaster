@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MergePDFView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var shareInbox: ShareInbox
     @State private var urls: [URL] = []
     @State private var showPicker = false
     @State private var title = "Merged PDF"
@@ -52,6 +53,7 @@ struct MergePDFView: View {
             }
         }
         .navigationTitle("Merge PDFs")
+        .task { if let url = shareInbox.consumeURL(for: .merge) { urls = [url] } }
         .toolbar { EditButton() }
         .sheet(isPresented: $showPicker) {
             PDFSourcePickerSheet(allowsMultipleSelection: true) { picked in urls = picked }
