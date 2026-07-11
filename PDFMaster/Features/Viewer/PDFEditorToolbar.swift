@@ -14,256 +14,353 @@ struct PDFEditorToolbar: View {
     let onCalibrate: () -> Void
     let onCompletePolygon: () -> Void
 
-    @State private var showModePicker = false
+    @State private var modeExpanded = false
+
+    private var isActiveMode: Bool { viewModel.editorMode != .view }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Mode bar
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    ForEach(EditorMode.allCases) { mode in
-                        Button {
-                            viewModel.editorMode = mode
-                            if mode == .signature { viewModel.showSignatureSheet = true }
-                            if mode == .search { viewModel.showSearchPanel = true }
-                        } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: mode.icon)
-                                    .font(.system(size: 18, weight: viewModel.editorMode == mode ? .bold : .regular))
-                                Text(mode.rawValue)
-                                    .font(.caption2)
-                            }
-                            .foregroundStyle(viewModel.editorMode == mode ? AppTheme.primary : .secondary)
-                            .frame(minWidth: 52)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 8)
-                            .background(viewModel.editorMode == mode ? AppTheme.primary.opacity(0.1) : .clear)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                        .buttonStyle(.plain)
-                    }
+            Spacer(minLength: 0)
+
+            VStack(spacing: 0) {
+                modePill
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+
+                if isActiveMode {
+                    subtoolSection
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+
+                actionBar
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
+                    .padding(.top, isActiveMode ? 4 : 0)
             }
-            .background(.bar)
-
-            Divider()
-
-            // Annotate subtool bar
-            if viewModel.editorMode == .annotate {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(AnnotationSubtool.allCases) { tool in
-                            Button {
-                                viewModel.annotationSubtool = tool
-                            } label: {
-                                Label(tool.rawValue, systemImage: tool.icon)
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(viewModel.annotationSubtool == tool ? AppTheme.primary : .secondary)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(viewModel.annotationSubtool == tool ? AppTheme.primary.opacity(0.1) : .clear)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        Divider().frame(height: 20)
-
-                        Button { viewModel.showInspector = true } label: {
-                            Image(systemName: "paintpalette")
-                                .font(.caption)
-                                .foregroundStyle(AppTheme.primary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                }
-                .background(.bar.opacity(0.8))
-                Divider()
-
-                // Multi-point subtoolbar
-                if viewModel.annotationSubtool.isMultiPointTool {
-                    HStack(spacing: 12) {
-                        Text("Tap to place points, double-tap to finish")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button { viewModel.polygonPoints = [] } label: {
-                            Label("Clear", systemImage: "xmark.circle")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.red)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.bar.opacity(0.8))
-                    Divider()
-                }
-
-                // Measurement subtoolbar
-                if viewModel.annotationSubtool == .measurement {
-                    HStack(spacing: 12) {
-                        Text("\(viewModel.measurementScale, specifier: "%.0f") px/\(viewModel.measurementUnit)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Button("Calibrate") { onCalibrate() }
-                            .font(.caption.weight(.medium))
-                            .buttonStyle(.plain)
-                            .foregroundStyle(AppTheme.primary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.bar.opacity(0.8))
-                    Divider()
-                }
+            .background {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(0.12), radius: 12, y: -2)
             }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
+        }
+        .ignoresSafeArea(.keyboard)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: viewModel.editorMode)
+        .animation(.spring(response: 0.3, dampingFraction: 0.9), value: viewModel.annotationSubtool)
+    }
 
-            // Draw toolbar
-            if viewModel.editorMode == .draw {
-                HStack(spacing: 12) {
-                    Button { viewModel.showInspector = true } label: {
-                        Label("Style", systemImage: "paintpalette")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(AppTheme.primary)
+    // MARK: - Mode Pill
 
-                    Button { viewModel.annotationColor = .yellow; viewModel.annotationOpacity = 0.4 } label: {
-                        Label("Highlighter", systemImage: "highlighter")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.orange)
-
-                    Button { viewModel.annotationColor = .black; viewModel.annotationOpacity = 1; viewModel.lineWidth = 4 } label: {
-                        Label("Marker", systemImage: "pencil.tip")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.primary)
-
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.bar.opacity(0.8))
-                Divider()
-            }
-
-            // Redact toolbar
-            if viewModel.editorMode == .redact {
-                HStack(spacing: 12) {
-                    Text("Drag to mark areas for redaction")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+    private var modePill: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(EditorMode.allCases) { mode in
+                    let isActive = viewModel.editorMode == mode
                     Button {
-                        onApplyRedactions()
+                        activateMode(mode)
                     } label: {
-                        Label("Apply", systemImage: "checkmark.circle.fill")
-                            .font(.caption.weight(.semibold))
+                        Image(systemName: mode.icon)
+                            .font(.system(size: 17, weight: isActive ? .bold : .regular))
+                            .foregroundStyle(isActive ? .white : .secondary)
+                            .frame(width: 38, height: 34)
+                            .background {
+                                if isActive {
+                                    Capsule()
+                                        .fill(AppTheme.primary)
+                                        .shadow(color: AppTheme.primary.opacity(0.3), radius: 4, y: 1)
+                                }
+                            }
+                            .scaleEffect(isActive ? 1.05 : 1)
+                            .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.red)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.bar.opacity(0.8))
-                Divider()
             }
+            .padding(.horizontal, 4)
+        }
+        .scrollClipDisabled(true)
+    }
 
-            // Stamp toolbar
-            if viewModel.editorMode == .stamp {
-                HStack(spacing: 12) {
-                    Button { viewModel.showStampPicker = true } label: {
-                        Label("Pick Stamp", systemImage: "seal")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(AppTheme.primary)
-                    Spacer()
-                    Text("Tap on the PDF to place")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.bar.opacity(0.8))
-                Divider()
+    private func activateMode(_ mode: EditorMode) {
+        let haptic = UIImpactFeedbackGenerator(style: .soft)
+        haptic.impactOccurred()
+        viewModel.editorMode = mode
+        if mode == .signature { viewModel.showSignatureSheet = true }
+        if mode == .search { viewModel.showSearchPanel = true }
+    }
+
+    // MARK: - Subtool Section
+
+    @ViewBuilder
+    private var subtoolSection: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .padding(.horizontal, 4)
+
+            switch viewModel.editorMode {
+            case .annotate:
+                annotateSubtools
+
+            case .draw:
+                drawSubtools
+
+            case .stamp:
+                ContextHint("Tap on the PDF to place", icon: "seal")
+
+            case .signature:
+                ContextHint("Tap to sign", icon: "signature")
+
+            case .text:
+                ContextHint("Tap to add text", icon: "character.textbox")
+
+            case .search:
+                ContextHint("Search document", icon: "magnifyingglass")
+
+            case .redact:
+                redactSubtools
+
+            case .image:
+                ContextHint("Tap to place an image", icon: "photo")
+
+            case .link:
+                ContextHint("Tap to place a link", icon: "link")
+
+            case .view:
+                EmptyView()
             }
-
-            // Image toolbar
-            if viewModel.editorMode == .image {
-                HStack(spacing: 12) {
-                    Text("Tap on the PDF to place an image")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.bar.opacity(0.8))
-                Divider()
-            }
-
-            // Link toolbar
-            if viewModel.editorMode == .link {
-                HStack(spacing: 12) {
-                    Text("Tap on the PDF to place a link")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.bar.opacity(0.8))
-                Divider()
-            }
-
-            // Bottom actions
-            HStack(spacing: 0) {
-                toolbarButton("Add Page", "doc.badge.plus", action: onAddPage)
-                toolbarButton("Undo", "arrow.uturn.backward") { viewModel.undo() }
-                    .disabled(!viewModel.canUndo)
-                toolbarButton("Redo", "arrow.uturn.forward") { viewModel.redo() }
-                    .disabled(!viewModel.canRedo)
-
-                if viewModel.editorMode == .annotate && viewModel.annotationSubtool.isMarkupTool {
-                    toolbarButton("Apply", "checkmark.circle.fill") { onMarkupApply() }
-                        .foregroundStyle(AppTheme.primary)
-                }
-
-                if viewModel.editorMode == .annotate && viewModel.annotationSubtool.isMultiPointTool {
-                    toolbarButton("Finish", "checkmark.circle.fill") { onCompletePolygon() }
-                        .foregroundStyle(AppTheme.primary)
-                }
-
-                toolbarButton("Pages", "square.grid.2x2", action: onReorder)
-                toolbarButton("Delete", "trash", action: onDeletePage)
-                    .foregroundStyle(.red)
-            }
-            .padding(.vertical, 4)
-            .background(.bar)
         }
     }
 
-    private func toolbarButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 3) {
-                Image(systemName: icon)
-                    .font(.system(size: 20, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 9, weight: .medium))
+    // MARK: Annotate
+
+    private var annotateSubtools: some View {
+        VStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(AnnotationSubtool.allCases) { tool in
+                        let isActive = viewModel.annotationSubtool == tool
+                        Button {
+                            viewModel.annotationSubtool = tool
+                        } label: {
+                            VStack(spacing: 2) {
+                                Image(systemName: tool.icon)
+                                    .font(.system(size: 15, weight: isActive ? .bold : .regular))
+                                Text(tool.rawValue)
+                                    .font(.system(size: 8, weight: isActive ? .semibold : .regular))
+                            }
+                            .foregroundStyle(isActive ? AppTheme.primary : .secondary)
+                            .frame(minWidth: 42)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 6)
+                            .background {
+                                if isActive {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(AppTheme.primary.opacity(0.12))
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    inspectorButton
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
             }
-            .foregroundStyle(.primary)
+            .scrollClipDisabled(true)
+
+            if viewModel.annotationSubtool.isMultiPointTool {
+                multiPointBar
+            }
+            if viewModel.annotationSubtool == .measurement {
+                measurementBar
+            }
+        }
+    }
+
+    private var inspectorButton: some View {
+        Button { viewModel.showInspector = true } label: {
+            Image(systemName: "paintpalette.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(AppTheme.primary)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(AppTheme.primary.opacity(0.12)))
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, 4)
+    }
+
+    private var multiPointBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "hand.tap")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text("Tap points · Double-tap or tap Finish")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button { viewModel.polygonPoints = [] } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.regularMaterial)
+    }
+
+    private var measurementBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "ruler")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text("\(viewModel.measurementScale, specifier: "%.0f") px/\(viewModel.measurementUnit)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Button("Calibrate") { onCalibrate() }
+                .font(.caption2.weight(.semibold))
+                .buttonStyle(.plain)
+                .foregroundStyle(AppTheme.primary)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.regularMaterial)
+    }
+
+    // MARK: Draw
+
+    private var drawSubtools: some View {
+        HStack(spacing: 8) {
+            Button { viewModel.showInspector = true } label: {
+                Label("Style", systemImage: "paintpalette.fill")
+                    .font(.caption2.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppTheme.primary)
+
+            quickColor(.yellow, label: "Highlighter")
+            quickColor(.black, label: "Marker")
+            quickColor(.systemBlue, label: "Pen")
+            quickColor(.systemRed, label: "Red")
+
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    private func quickColor(_ color: UIColor, label: String) -> some View {
+        Button {
+            viewModel.annotationColor = Color(color)
+            viewModel.annotationOpacity = color == .yellow ? 0.4 : 1
+            viewModel.lineWidth = color == .black ? 4 : 2.5
+        } label: {
+            Circle()
+                .fill(Color(color))
+                .frame(width: 22, height: 22)
+                .overlay(Circle().strokeBorder(.white.opacity(0.5), lineWidth: 1))
+                .shadow(color: Color(color).opacity(0.3), radius: 2)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Redact
+
+    private var redactSubtools: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "rectangle.slash")
+                .font(.caption2)
+                .foregroundStyle(.red)
+            Text("Drag to mark areas")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button { onApplyRedactions() } label: {
+                Label("Apply", systemImage: "checkmark.circle.fill")
+                    .font(.caption2.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.red)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    // MARK: - Action Bar
+
+    private var actionBar: some View {
+        HStack(spacing: 0) {
+            actionItem("Add Page", "doc.badge.plus", action: onAddPage)
+
+            Divider().frame(height: 20)
+
+            actionItem("Undo", "arrow.uturn.backward") { viewModel.undo() }
+                .disabled(!viewModel.canUndo)
+            actionItem("Redo", "arrow.uturn.forward") { viewModel.redo() }
+                .disabled(!viewModel.canRedo)
+
+            if viewModel.editorMode == .annotate && viewModel.annotationSubtool.isMarkupTool {
+                Divider().frame(height: 20)
+                actionItem("Apply", "checkmark.circle.fill", color: AppTheme.primary, action: onMarkupApply)
+            }
+
+            if viewModel.editorMode == .annotate && viewModel.annotationSubtool.isMultiPointTool {
+                Divider().frame(height: 20)
+                actionItem("Finish", "checkmark.circle.fill", color: AppTheme.primary, action: onCompletePolygon)
+            }
+
+            Divider().frame(height: 20)
+
+            actionItem("Pages", "square.grid.2x2", action: onReorder)
+            actionItem("Delete", "trash", color: .red, action: onDeletePage)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func actionItem(_ title: String, _ icon: String, color: Color = .primary, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 7, weight: .medium))
+            }
+            .foregroundStyle(color)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Context Hint
+
+struct ContextHint: View {
+    let text: String
+    let icon: String
+
+    init(_ text: String, icon: String) {
+        self.text = text
+        self.icon = icon
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 }

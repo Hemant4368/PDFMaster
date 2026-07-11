@@ -2,107 +2,140 @@ import SwiftUI
 
 struct PDFAnnotationInspector: View {
     @ObservedObject var viewModel: PDFEditorViewModel
+    @State private var selectedTab = 0
 
     var body: some View {
         NavigationStack {
-            Form {
-                colorSection
-                opacitySection
+            ScrollView {
+                VStack(spacing: 16) {
+                    colorSection
 
-                if viewModel.editorMode == .annotate && viewModel.annotationSubtool.isShapeTool {
-                    lineWidthSection
-                    fillColorSection
-                    dashSection
+                    if viewModel.editorMode == .annotate && viewModel.annotationSubtool.isShapeTool {
+                        shapeStyleSection
+                    }
+
+                    if viewModel.editorMode == .text {
+                        fontSection
+                    }
+
+                    if viewModel.editorMode == .draw {
+                        brushSection
+                    }
+
+                    if viewModel.selectionManager.hasSelection {
+                        deleteSection
+                    }
                 }
-
-                if viewModel.editorMode == .text {
-                    fontSection
-                    textFormatSection
-                    alignmentSection
-                    spacingSection
-                    borderSection
+                .padding(16)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("Style")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { viewModel.showInspector = false }
+                        .fontWeight(.semibold)
                 }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
 
-                if viewModel.editorMode == .draw {
-                    drawBrushSection
-                }
+    // MARK: - Color Swatches
 
-                if viewModel.selectionManager.hasSelection {
-                    Section {
-                        Button(role: .destructive) {
-                            if let ann = viewModel.selectionManager.selectedAnnotation,
-                               let page = ann.page {
-                                viewModel.removeAnnotation(ann, from: page)
-                                viewModel.selectionManager.deselectAll()
-                            }
-                        } label: {
-                            Label("Delete Annotation", systemImage: "trash")
+    private var colorSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionLabel("Color", icon: "paintpalette.fill")
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 6), spacing: 10) {
+                ForEach(annotationColors, id: \.self) { color in
+                    ZStack {
+                        Circle()
+                            .fill(color)
+                            .frame(width: 38, height: 38)
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(.primary.opacity(0.15), lineWidth: 1)
+                            )
+                            .shadow(color: color.opacity(0.3), radius: viewModel.annotationColor == color ? 4 : 0)
+
+                        if viewModel.annotationColor == color {
+                            Image(systemName: "checkmark")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(color == .black || color == .blue || color == .purple ? .white : .black)
+                        }
+                    }
+                    .scaleEffect(viewModel.annotationColor == color ? 1.1 : 1)
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+                            viewModel.annotationColor = color
                         }
                     }
                 }
             }
-            .navigationTitle("Annotation Style")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                Button("Done") { viewModel.showInspector = false }
-            }
+
+            opacitySlider
         }
-        .presentationDetents([.medium, .large])
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var colorSection: some View {
-        Section("Color") {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 6), spacing: 8) {
-                ForEach(annotationColors, id: \.self) { color in
-                    Circle()
-                        .fill(color)
-                        .frame(width: 32, height: 32)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.primary.opacity(0.2), lineWidth: 1)
-                        )
-                        .overlay(
-                            Circle()
-                                .stroke(AppTheme.primary, lineWidth: 2)
-                                .opacity(viewModel.annotationColor == color ? 1 : 0)
-                        )
-                        .onTapGesture { viewModel.annotationColor = color }
-                }
-            }
-            .padding(.vertical, 4)
-        }
-    }
-
-    private var opacitySection: some View {
-        Section("Opacity") {
-            VStack {
-                Slider(value: $viewModel.annotationOpacity, in: 0.1...1.0)
+    private var opacitySlider: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text("Opacity")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
                 Text("\(Int(viewModel.annotationOpacity * 100))%")
-                    .font(.caption)
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
+            Slider(value: $viewModel.annotationOpacity, in: 0.1...1.0)
+                .tint(AppTheme.primary)
         }
     }
 
-    private var lineWidthSection: some View {
-        Section("Line Width") {
-            VStack {
-                Slider(value: $viewModel.lineWidth, in: 1...12)
-                Text("\(viewModel.lineWidth, specifier: "%.0f") pt")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+    // MARK: - Shape Style
+
+    private var shapeStyleSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionLabel("Shape Style", icon: "square.on.circle")
+
+            lineWidthControl
+            dashControl
+            fillControl
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var lineWidthControl: some View {
+        HStack {
+            Image(systemName: "lineweight")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+            Slider(value: $viewModel.lineWidth, in: 1...12)
+                .tint(AppTheme.primary)
+            Text("\(viewModel.lineWidth, specifier: "%.0f") pt")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .frame(width: 36)
         }
     }
 
-    private var fillColorSection: some View {
-        Section("Fill Color") {
-            ColorPicker("Fill", selection: $viewModel.fillColor)
-        }
-    }
-
-    private var dashSection: some View {
-        Section("Dash Pattern") {
+    private var dashControl: some View {
+        HStack {
+            Image(systemName: "line.diagonal")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
             Picker("Style", selection: Binding(
                 get: { viewModel.dashPattern == nil ? 0 : viewModel.dashPattern == [6, 4] ? 1 : 2 },
                 set: {
@@ -113,111 +146,196 @@ struct PDFAnnotationInspector: View {
                     }
                 }
             )) {
-                Text("Solid").tag(0)
-                Text("Dashed").tag(1)
-                Text("Dotted").tag(2)
+                Label("Solid", systemImage: "line.diagonal").tag(0)
+                Label("Dash", systemImage: "line.diagonal").tag(1)
+                Label("Dot", systemImage: "dot.viewfinder").tag(2)
             }
             .pickerStyle(.segmented)
         }
     }
+
+    private var fillControl: some View {
+        HStack {
+            Image(systemName: "drop.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+            ColorPicker("Fill Color", selection: $viewModel.fillColor)
+                .font(.subheadline)
+        }
+    }
+
+    // MARK: - Font
 
     private var fontSection: some View {
-        Section("Font") {
-            HStack {
-                Text("Size")
-                Spacer()
-                Slider(value: $viewModel.freeTextStyle.fontSize, in: 8...72)
-                Text("\(viewModel.freeTextStyle.fontSize, specifier: "%.0f")")
-                    .font(.caption)
-                    .frame(width: 30)
+        VStack(alignment: .leading, spacing: 12) {
+            sectionLabel("Font", icon: "character.textbox")
+
+            VStack(spacing: 10) {
+                fontPicker
+                fontSizeControl
+                formatToggles
+                alignmentControl
+                colorRow("Text Color", color: $viewModel.freeTextStyle.textColor)
+                colorRow("Background", color: $viewModel.freeTextStyle.backgroundColor)
+                colorRow("Border", color: $viewModel.freeTextStyle.borderColor)
             }
-            ColorPicker("Text Color", selection: $viewModel.freeTextStyle.textColor)
-            ColorPicker("Background", selection: $viewModel.freeTextStyle.backgroundColor)
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var fontPicker: some View {
+        Picker("Font", selection: $viewModel.freeTextStyle.fontFamily) {
+            ForEach(["Helvetica", "Helvetica Neue", "Arial", "Times New Roman", "Courier", "Georgia", "Verdana"], id: \.self) { name in
+                Text(name).tag(name)
+            }
+        }
+        .pickerStyle(.menu)
+    }
+
+    private var fontSizeControl: some View {
+        HStack {
+            Image(systemName: "textformat.size")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+            Slider(value: $viewModel.freeTextStyle.fontSize, in: 8...72, step: 1)
+                .tint(AppTheme.primary)
+            Text("\(viewModel.freeTextStyle.fontSize, specifier: "%.0f")")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .frame(width: 30)
         }
     }
 
-    private var textFormatSection: some View {
-        Section("Format") {
-            Toggle("Bold", isOn: $viewModel.freeTextStyle.isBold)
-            Toggle("Italic", isOn: $viewModel.freeTextStyle.isItalic)
-            Toggle("Underline", isOn: $viewModel.freeTextStyle.isUnderline)
-            Picker("Font", selection: $viewModel.freeTextStyle.fontFamily) {
-                Text("Helvetica").tag("Helvetica")
-                Text("Helvetica Neue").tag("Helvetica Neue")
-                Text("Arial").tag("Arial")
-                Text("Times New Roman").tag("Times New Roman")
-                Text("Courier").tag("Courier")
-                Text("Georgia").tag("Georgia")
-                Text("Verdana").tag("Verdana")
-            }
+    private var formatToggles: some View {
+        HStack(spacing: 8) {
+            formatButton("B", isOn: $viewModel.freeTextStyle.isBold)
+            formatButton("I", isOn: $viewModel.freeTextStyle.isItalic)
+            formatButton("U", isOn: $viewModel.freeTextStyle.isUnderline)
+            Spacer()
+            alignmentButton("text.alignleft", alignment: .left)
+            alignmentButton("text.aligncenter", alignment: .center)
+            alignmentButton("text.alignright", alignment: .right)
         }
     }
 
-    private var alignmentSection: some View {
-        Section("Alignment") {
-            Picker("Align", selection: $viewModel.freeTextStyle.alignment) {
-                Image(systemName: "text.alignleft").tag(NSTextAlignment.left)
-                Image(systemName: "text.aligncenter").tag(NSTextAlignment.center)
-                Image(systemName: "text.alignright").tag(NSTextAlignment.right)
-            }
-            .pickerStyle(.segmented)
-        }
-    }
-
-    private var spacingSection: some View {
-        Section("Spacing") {
-            VStack {
-                HStack {
-                    Text("Char Spacing")
-                    Spacer()
-                    Slider(value: $viewModel.freeTextStyle.characterSpacing, in: 0...10)
-                    Text("\(viewModel.freeTextStyle.characterSpacing, specifier: "%.1f")")
-                        .font(.caption)
-                        .frame(width: 30)
+    private func formatButton(_ label: String, isOn: Binding<Bool>) -> some View {
+        Button {
+            withAnimation { isOn.wrappedValue.toggle() }
+        } label: {
+            Text(label)
+                .font(.system(size: 14, weight: .bold))
+                .frame(width: 32, height: 28)
+                .background {
+                    if isOn.wrappedValue {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(AppTheme.primary.opacity(0.15))
+                    }
                 }
+                .foregroundStyle(isOn.wrappedValue ? AppTheme.primary : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func alignmentButton(_ icon: String, alignment: NSTextAlignment) -> some View {
+        Button {
+            viewModel.freeTextStyle.alignment = alignment
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .frame(width: 32, height: 28)
+                .background {
+                    if viewModel.freeTextStyle.alignment == alignment {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(AppTheme.primary.opacity(0.15))
+                    }
+                }
+                .foregroundStyle(viewModel.freeTextStyle.alignment == alignment ? AppTheme.primary : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var alignmentControl: some View {
+        EmptyView()
+    }
+
+    private func colorRow(_ label: String, color: Binding<Color>) -> some View {
+        HStack {
+            ColorPicker(label, selection: color)
+                .font(.subheadline)
+        }
+    }
+
+    // MARK: - Brush
+
+    private var brushSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionLabel("Brush", icon: "pencil.tip")
+
+            VStack(spacing: 10) {
+                Picker("Type", selection: $viewModel.brushType) {
+                    Label("Pencil", systemImage: "pencil.tip").tag(AnnotationTool.pencil)
+                    Label("Marker", systemImage: "pencil.tip").tag(AnnotationTool.marker)
+                    Label("Highlighter", systemImage: "highlighter").tag(AnnotationTool.highlighterPen)
+                    Label("Brush", systemImage: "paintbrush.pointed").tag(AnnotationTool.brush)
+                    Label("Eraser", systemImage: "eraser").tag(AnnotationTool.eraser)
+                }
+                .pickerStyle(.menu)
+
                 HStack {
-                    Text("Line Height")
-                    Spacer()
-                    Slider(value: $viewModel.freeTextStyle.lineHeight, in: 0.8...3.0)
-                    Text("\(viewModel.freeTextStyle.lineHeight, specifier: "%.1f")")
+                    Image(systemName: "lineweight")
                         .font(.caption)
-                        .frame(width: 30)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20)
+                    Slider(value: $viewModel.lineWidth, in: 1...20)
+                        .tint(AppTheme.primary)
+                    Text("\(viewModel.lineWidth, specifier: "%.0f") pt")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .frame(width: 36)
                 }
             }
         }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var borderSection: some View {
-        Section("Border") {
-            ColorPicker("Border Color", selection: $viewModel.freeTextStyle.borderColor)
-            HStack {
-                Text("Width")
-                Spacer()
-                Slider(value: $viewModel.freeTextStyle.borderWidth, in: 0...8)
-                Text("\(viewModel.freeTextStyle.borderWidth, specifier: "%.0f") pt")
-                    .font(.caption)
-                    .frame(width: 40)
+    // MARK: - Delete
+
+    private var deleteSection: some View {
+        Button(role: .destructive) {
+            if let ann = viewModel.selectionManager.selectedAnnotation,
+               let page = ann.page {
+                viewModel.removeAnnotation(ann, from: page)
+                viewModel.selectionManager.deselectAll()
+                viewModel.showInspector = false
             }
+        } label: {
+            Label("Delete Annotation", systemImage: "trash")
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
+        .buttonStyle(.plain)
     }
 
-    private var drawBrushSection: some View {
-        Section("Brush") {
-            Picker("Type", selection: $viewModel.brushType) {
-                Text("Pencil").tag(AnnotationTool.pencil)
-                Text("Marker").tag(AnnotationTool.marker)
-                Text("Highlighter").tag(AnnotationTool.highlighterPen)
-                Text("Brush").tag(AnnotationTool.brush)
-                Text("Eraser").tag(AnnotationTool.eraser)
-            }
-            HStack {
-                Text("Width")
-                Spacer()
-                Slider(value: $viewModel.lineWidth, in: 1...20)
-                Text("\(viewModel.lineWidth, specifier: "%.0f") pt")
-                    .font(.caption)
-                    .frame(width: 40)
-            }
+    // MARK: - Helpers
+
+    private func sectionLabel(_ text: String, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(AppTheme.primary)
+            Text(text)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
         }
     }
 }

@@ -97,21 +97,23 @@ struct InteractivePDFKitView: UIViewRepresentable {
 
         let tap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.handleTap(_:)))
         tap.delegate = coordinator
-        gestureOverlay.addGestureRecognizer(tap)
+        pdfView.addGestureRecognizer(tap)
 
         let doubleTap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         doubleTap.delegate = coordinator
-        gestureOverlay.addGestureRecognizer(doubleTap)
+        pdfView.addGestureRecognizer(doubleTap)
 
         let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.handlePan(_:)))
         pan.delegate = coordinator
-        gestureOverlay.addGestureRecognizer(pan)
+        pan.minimumNumberOfTouches = 1
+        pan.maximumNumberOfTouches = 1
+        pdfView.addGestureRecognizer(pan)
 
         let longPress = UILongPressGestureRecognizer(target: coordinator, action: #selector(Coordinator.handleLongPress(_:)))
         longPress.delegate = coordinator
         longPress.minimumPressDuration = 0.4
-        gestureOverlay.addGestureRecognizer(longPress)
+        pdfView.addGestureRecognizer(longPress)
 
         tap.require(toFail: doubleTap)
 
@@ -175,7 +177,7 @@ struct InteractivePDFKitView: UIViewRepresentable {
             switch mode {
             case .normal:
                 pdfView.isUserInteractionEnabled = true
-                gestureOverlay?.isUserInteractionEnabled = true
+                gestureOverlay?.isUserInteractionEnabled = false
                 canvasView?.isUserInteractionEnabled = false
                 shapePreview?.isHidden = true
             case .tapToPlace:
@@ -512,10 +514,29 @@ struct InteractivePDFKitView: UIViewRepresentable {
 
 extension InteractivePDFKitView.Coordinator: UIGestureRecognizerDelegate {
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-        if gestureRecognizer is UILongPressGestureRecognizer || other is UILongPressGestureRecognizer {
+        if gestureRecognizer is UITapGestureRecognizer && other is UITapGestureRecognizer {
             return false
         }
-        if gestureRecognizer is UITapGestureRecognizer && other is UITapGestureRecognizer {
+        if gestureRecognizer is UILongPressGestureRecognizer {
+            return false
+        }
+        if gestureRecognizer is UIPanGestureRecognizer && other is UIPanGestureRecognizer {
+            return true
+        }
+        return true
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let vm = editorViewModel else { return true }
+        if gestureRecognizer is UIPanGestureRecognizer && vm.gestureMode == .normal {
+            guard let pdfView, let page = pdfView.currentPage else { return false }
+            let location = gestureRecognizer.location(in: pdfView)
+            let pagePoint = pdfView.convert(location, to: page)
+            for annotation in page.annotations {
+                if !annotation.isReadOnly && annotation.bounds.insetBy(dx: -10, dy: -10).contains(pagePoint) {
+                    return true
+                }
+            }
             return false
         }
         return true
