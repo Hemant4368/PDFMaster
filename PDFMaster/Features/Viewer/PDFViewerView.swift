@@ -17,22 +17,37 @@ struct PDFViewerView: View {
     @State private var showThumbnails = false
     @State private var hasUnsavedChanges = false
     @State private var isSaving = false
-    @State private var showSignatureSheet = false
     @State private var signatureCanvas = PKCanvasView()
-    @State private var showTextAlert = false
-    @State private var textAnnotation = "Text"
     @State private var showReorderSheet = false
     @State private var reorderIndexes: [Int] = []
     @State private var showDeletePageConfirmation = false
     @State private var errorMessage: String?
+    @StateObject private var editorVM = PDFEditorViewModel()
 
     var body: some View {
         Group {
             if let pdfDocument {
                 VStack(spacing: 0) {
                     if showThumbnails { thumbnailStrip }
-                    EditablePDFKitView(document: pdfDocument, currentPageIndex: $currentPageIndex, reloadToken: reloadToken)
-                    viewerToolbar
+                    InteractivePDFKitView(
+                        document: pdfDocument,
+                        currentPageIndex: $currentPageIndex,
+                        reloadToken: reloadToken,
+                        editorViewModel: editorVM
+                    )
+
+                    PDFEditorToolbar(
+                        viewModel: editorVM,
+                        documentPageCount: pdfDocument.pageCount,
+                        currentPageIndex: currentPageIndex,
+                        onSave: saveEditedPDF,
+                        onPrint: { if let url { PrintController.printPDF(url: url) } },
+                        onAddPage: addPage,
+                        onDeletePage: { showDeletePageConfirmation = true },
+                        onReorder: prepareReorder,
+                        onMarkupApply: { editorVM.applyMarkupFromSelection(); markEdited() }
+                    )
+
                     if hasUnsavedChanges {
                         saveButton
                             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -47,9 +62,6 @@ struct PDFViewerView: View {
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-//            ToolbarItem(placement: .topBarLeading) {
-//                Button("Done") { dismiss() }
-//            }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button { showThumbnails.toggle(); loadThumbnails() } label: {
                     Image(systemName: "square.grid.2x2")
@@ -63,22 +75,29 @@ struct PDFViewerView: View {
             }
         }
         .sheet(item: $shareURL) { ShareSheet(items: [$0]) }
-        .sheet(isPresented: $showSignatureSheet) { signatureSheet }
+        .sheet(isPresented: $editorVM.showSignatureSheet) { signatureSheet }
         .sheet(isPresented: $showReorderSheet) { reorderSheet }
-        .alert("Add Text", isPresented: $showTextAlert) {
-            TextField("Text", text: $textAnnotation)
-            Button("Cancel", role: .cancel) {}
-            Button("Add") { addTextAnnotation() }
+        .sheet(isPresented: $editorVM.showInspector) {
+            PDFAnnotationInspector(viewModel: editorVM)
+        }
+        .sheet(isPresented: $editorVM.showStampPicker) {
+            PDFStampPicker(viewModel: editorVM)
+        }
+        .sheet(isPresented: $editorVM.showSearchPanel) {
+            PDFSearchPanel(viewModel: editorVM)
+        }
+        .alert("Add Text", isPresented: $editorVM.showTextInput) {
+            TextField("Text", text: $editorVM.textInputValue)
+            Button("Cancel", role: .cancel) { editorVM.pendingTapPoint = nil }
+            Button("Add") { editorVM.confirmTextAnnotation(); markEdited() }
         } message: {
-            Text("Add a text annotation to the current page.")
+            Text("Tap a location on the PDF to place this text.")
         }
         .confirmationDialog("Delete this page?", isPresented: $showDeletePageConfirmation, titleVisibility: .visible) {
-            Button("Delete Page", role: .destructive) {
-                deleteCurrentPage()
-            }
+            Button("Delete Page", role: .destructive) { deleteCurrentPage() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Page \(currentPageIndex + 1) will be removed from this PDF. Tap Save in files to keep the change.")
+            Text("Page \(currentPageIndex + 1) will be removed from this PDF.")
         }
         .alert("PDF Viewer", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
@@ -88,20 +107,13 @@ struct PDFViewerView: View {
         .overlay {
             if isSaving { LoadingOverlay(title: "Saving PDF") }
         }
-    }
-
-    private var viewerToolbar: some View {
-        HStack(spacing: 0) {
-            viewerAction("Add Page", "doc.badge.plus") { addPage() }
-            viewerAction("Signature", "signature") { showSignatureSheet = true }
-            viewerAction("Edit", "pencil.and.outline") { addHighlightAnnotation() }
-            viewerAction("Text", "character.textbox") { showTextAlert = true }
-            viewerAction("Reorder\npages", "arrow.up.arrow.down.square") { prepareReorder() }
-            viewerAction("Delete\npage", "trash") { showDeletePageConfirmation = true }
+        .onChange(of: editorVM.searchText) {
+            guard editorVM.showSearchPanel, let pdfDocument else { return }
+            editorVM.performSearch(in: pdfDocument)
         }
-        .padding(.top, 12)
-        .padding(.bottom, 10)
-        .background(.bar)
+        .onReceive(editorVM.storage.$editCount.dropFirst()) { _ in
+            markEdited()
+        }
     }
 
     private var saveButton: some View {
@@ -112,24 +124,6 @@ struct PDFViewerView: View {
                 .padding(.vertical, 14)
         }
         .background(Color(.systemBackground))
-    }
-
-    private func viewerAction(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 22, weight: .semibold))
-                    .frame(height: 24)
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.78)
-            }
-            .foregroundStyle(AppTheme.primary)
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
     }
 
     private var thumbnailStrip: some View {
@@ -169,7 +163,7 @@ struct PDFViewerView: View {
                     .padding()
                 PrimaryButton(title: "Apply Signature", systemImage: "signature") {
                     applySignature()
-                    showSignatureSheet = false
+                    editorVM.showSignatureSheet = false
                 }
                 .padding(.horizontal)
                 Spacer()
@@ -177,7 +171,7 @@ struct PDFViewerView: View {
             .navigationTitle("Signature")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                Button("Cancel") { showSignatureSheet = false }
+                Button("Cancel") { editorVM.showSignatureSheet = false }
             }
         }
         .presentationDetents([.medium, .large])
@@ -240,29 +234,6 @@ struct PDFViewerView: View {
         markEdited()
     }
 
-    private func addHighlightAnnotation() {
-        guard let page = currentPage() else { return }
-        let bounds = page.bounds(for: .cropBox)
-        let rect = CGRect(x: bounds.minX + 34, y: bounds.maxY - 120, width: bounds.width - 68, height: 26)
-        let annotation = PDFAnnotation(bounds: rect, forType: .highlight, withProperties: nil)
-        annotation.color = AppTheme.primaryUIColor.withAlphaComponent(0.35)
-        page.addAnnotation(annotation)
-        markEdited()
-    }
-
-    private func addTextAnnotation() {
-        guard let page = currentPage() else { return }
-        let bounds = page.bounds(for: .cropBox)
-        let rect = CGRect(x: bounds.midX - 120, y: bounds.midY - 24, width: 240, height: 48)
-        let annotation = PDFAnnotation(bounds: rect, forType: .freeText, withProperties: nil)
-        annotation.contents = textAnnotation
-        annotation.font = UIFont.systemFont(ofSize: 20, weight: .semibold)
-        annotation.fontColor = AppTheme.primaryUIColor
-        annotation.color = .clear
-        page.addAnnotation(annotation)
-        markEdited()
-    }
-
     private func applySignature() {
         guard let pdfDocument, let data = pdfDocument.dataRepresentation(), let signature = signatureImage() else { return }
         do {
@@ -313,7 +284,6 @@ struct PDFViewerView: View {
             errorMessage = "A PDF must contain at least one page."
             return
         }
-
         let deletedIndex = min(max(currentPageIndex, 0), pdfDocument.pageCount - 1)
         pdfDocument.removePage(at: deletedIndex)
         currentPageIndex = min(deletedIndex, pdfDocument.pageCount - 1)
@@ -343,10 +313,6 @@ struct PDFViewerView: View {
         thumbnails = (0..<pdfDocument.pageCount).compactMap {
             pdfDocument.page(at: $0)?.thumbnail(of: CGSize(width: 90, height: 120), for: .cropBox)
         }
-    }
-
-    private func currentPage() -> PDFPage? {
-        pdfDocument?.page(at: min(max(currentPageIndex, 0), max((pdfDocument?.pageCount ?? 1) - 1, 0)))
     }
 
     private func goToPage(_ index: Int) {
