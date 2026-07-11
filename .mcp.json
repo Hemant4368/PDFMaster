@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "/private/tmp/crg-venv/bin/python3.13",
+      "args": [
+        "-m",
+        "code_review_graph",
+        "serve"
+      ],
+      "cwd": "/Users/hemantpatel/Documents/MyProjects/App Live/PDFMaster",
+      "type": "stdio"
+    }
+  }
+}
