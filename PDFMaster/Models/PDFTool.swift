@@ -8,7 +8,7 @@ enum ToolCategory: String, CaseIterable, Identifiable {
     case convertFrom  = "Convert From"
     case edit         = "Edit"
     case security     = "Security"
-//    case intelligence = "Intelligence"
+    case intelligence = "Intelligence"
 
     var id: String { rawValue }
 
@@ -21,7 +21,7 @@ enum ToolCategory: String, CaseIterable, Identifiable {
         case .convertTo:    .purple
         case .convertFrom:  Color(red: 0.18, green: 0.72, blue: 0.72)
         case .edit:         .blue
-//        case .intelligence: .green
+        case .intelligence: .green
         }
     }
 }
@@ -72,9 +72,9 @@ enum PDFTool: String, CaseIterable, Identifiable {
     case comparePDF     = "Compare PDF"
 
     // INTELLIGENCE
-//    case aiSummarizer   = "AI Summarizer"
-//    case translatePDF   = "Translate PDF"
-//    case pdfToMarkdown  = "PDF to Markdown"
+    case aiSummarizer   = "AI Summarizer"
+    case translatePDF   = "Translate PDF"
+    case pdfToMarkdown  = "PDF to Markdown"
 
     var id: String { rawValue }
 
@@ -92,8 +92,8 @@ enum PDFTool: String, CaseIterable, Identifiable {
             return .edit
         case .password, .signature, .redactPDF, .comparePDF:
             return .security
-//        case .aiSummarizer, .translatePDF, .pdfToMarkdown:
-//            return .intelligence
+        case .aiSummarizer, .translatePDF, .pdfToMarkdown:
+            return .intelligence
         }
     }
 
@@ -140,9 +140,9 @@ enum PDFTool: String, CaseIterable, Identifiable {
         case .redactPDF:      "rectangle.fill.on.rectangle.fill"
         case .comparePDF:     "arrow.left.arrow.right.square"
         // Intelligence
-//        case .aiSummarizer:   "sparkles.rectangle.stack"
-//        case .translatePDF:   "character.book.closed"
-//        case .pdfToMarkdown:  "chevron.left.forwardslash.chevron.right"
+        case .aiSummarizer:   "sparkles.rectangle.stack"
+        case .translatePDF:   "character.book.closed"
+        case .pdfToMarkdown:  "chevron.left.forwardslash.chevron.right"
         }
     }
 }

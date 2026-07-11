@@ -2,6 +2,7 @@ import PDFKit
 import SwiftUI
 
 struct PDFToMarkdownView: View {
+    @EnvironmentObject private var shareInbox: ShareInbox
     @State private var sourceURL: URL?
     @State private var showPicker = false
     @State private var markdownText = ""
@@ -44,6 +45,7 @@ struct PDFToMarkdownView: View {
             }
         }
         .navigationTitle("PDF to Markdown")
+        .task { if let url = shareInbox.consumeURL(for: .pdfToMarkdown) { sourceURL = url } }
         .sheet(isPresented: $showPicker) {
             PDFSourcePickerSheet { urls in sourceURL = urls.first; markdownText = "" }
         }

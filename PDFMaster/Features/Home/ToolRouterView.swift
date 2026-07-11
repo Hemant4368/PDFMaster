@@ -44,9 +44,9 @@ struct ToolRouterView: View {
         case .redactPDF:    RedactPDFView()
         case .comparePDF:   ComparePDFView()
         // INTELLIGENCE
-//        case .aiSummarizer: AISummarizerView()
-//        case .translatePDF: TranslatePDFView()
-//        case .pdfToMarkdown: PDFToMarkdownView()
+        case .aiSummarizer:  AISummarizerView()
+        case .translatePDF:  TranslatePDFView()
+        case .pdfToMarkdown: PDFToMarkdownView()
         }
     }
 }

@@ -2,6 +2,7 @@ import PDFKit
 import SwiftUI
 
 struct TranslatePDFView: View {
+    @EnvironmentObject private var shareInbox: ShareInbox
     @AppStorage("claude_api_key") private var apiKey = ""
     @State private var sourceURL: URL?
     @State private var showPicker = false
@@ -66,6 +67,7 @@ struct TranslatePDFView: View {
             }
         }
         .navigationTitle("Translate PDF")
+        .task { if let url = shareInbox.consumeURL(for: .translatePDF) { sourceURL = url } }
         .sheet(isPresented: $showPicker) {
             PDFSourcePickerSheet { urls in sourceURL = urls.first; translatedText = "" }
         }
