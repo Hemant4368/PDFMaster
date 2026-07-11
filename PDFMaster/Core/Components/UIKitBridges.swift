@@ -1,13 +1,18 @@
 import PDFKit
 import PencilKit
+import QuickLook
 import SwiftUI
 import UIKit
 import VisionKit
+import WebKit
+
+// MARK: — PDFKitView
 
 struct PDFKitView: UIViewRepresentable {
     let url: URL
     var displayMode: PDFDisplayMode = .singlePageContinuous
     var autoScales = true
+    var allowsDocumentInteraction = true
 
     func makeUIView(context: Context) -> PDFView {
         let view = PDFView()
@@ -15,6 +20,7 @@ struct PDFKitView: UIViewRepresentable {
         view.displayDirection = .vertical
         view.autoScales = autoScales
         view.backgroundColor = .systemBackground
+        view.isUserInteractionEnabled = allowsDocumentInteraction
         view.document = PDFDocument(url: url)
         return view
     }
@@ -25,6 +31,8 @@ struct PDFKitView: UIViewRepresentable {
         }
     }
 }
+
+// MARK: — EditablePDFKitView
 
 struct EditablePDFKitView: UIViewRepresentable {
     let document: PDFDocument
@@ -71,11 +79,15 @@ struct EditablePDFKitView: UIViewRepresentable {
         }
 
         @objc func pageChanged(_ notification: Notification) {
-            guard let pdfView, let page = pdfView.currentPage, let index = pdfView.document?.index(for: page) else { return }
+            guard let pdfView,
+                  let page = pdfView.currentPage,
+                  let index = pdfView.document?.index(for: page) else { return }
             currentPageIndex = index
         }
     }
 }
+
+// MARK: — DocumentScannerView
 
 struct DocumentScannerView: UIViewControllerRepresentable {
     let onComplete: ([UIImage]) -> Void
@@ -117,13 +129,18 @@ struct DocumentScannerView: UIViewControllerRepresentable {
     }
 }
 
+// MARK: — DocumentPickerView
+
 struct DocumentPickerView: UIViewControllerRepresentable {
     var contentTypes: [UTTypeWrapper] = [.pdf]
     let allowsMultipleSelection: Bool
     let onPick: ([URL]) -> Void
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let controller = UIDocumentPickerViewController(forOpeningContentTypes: contentTypes.map(\.type), asCopy: true)
+        let controller = UIDocumentPickerViewController(
+            forOpeningContentTypes: contentTypes.map(\.type),
+            asCopy: true
+        )
         controller.allowsMultipleSelection = allowsMultipleSelection
         controller.delegate = context.coordinator
         return controller
@@ -142,6 +159,8 @@ struct DocumentPickerView: UIViewControllerRepresentable {
     }
 }
 
+// MARK: — ShareSheet
+
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController {
@@ -149,6 +168,8 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
+
+// MARK: — PencilCanvasView
 
 struct PencilCanvasView: UIViewRepresentable {
     @Binding var canvasView: PKCanvasView
@@ -163,10 +184,113 @@ struct PencilCanvasView: UIViewRepresentable {
     func updateUIView(_ uiView: PKCanvasView, context: Context) {}
 }
 
+// MARK: — PrintController
+
 struct PrintController {
     static func printPDF(url: URL) {
         let controller = UIPrintInteractionController.shared
         controller.printingItem = url
         controller.present(animated: true)
+    }
+}
+
+// MARK: — QLPreviewControllerView (Office file preview)
+
+struct QLPreviewControllerView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UINavigationController {
+        let preview = QLPreviewController()
+        preview.dataSource = context.coordinator
+        return UINavigationController(rootViewController: preview)
+    }
+
+    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(url: url) }
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        let url: URL
+        init(url: URL) { self.url = url }
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> any QLPreviewItem {
+            url as NSURL
+        }
+    }
+}
+
+// MARK: — HTMLPDFRenderer (WKWebView → PDF Data)
+
+@MainActor
+final class HTMLPDFRenderer: NSObject {
+    private var continuation: CheckedContinuation<Data, Error>?
+    private var webView: WKWebView?
+
+    static func render(htmlString: String? = nil, pageURL: URL? = nil) async throws -> Data {
+        let renderer = HTMLPDFRenderer()
+        return try await renderer.start(htmlString: htmlString, pageURL: pageURL)
+    }
+
+    private func start(htmlString: String?, pageURL: URL?) async throws -> Data {
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            let wv = WKWebView(frame: CGRect(x: 0, y: 0, width: 595, height: 842))
+            wv.navigationDelegate = self
+            self.webView = wv
+
+            if let htmlString {
+                wv.loadHTMLString(htmlString, baseURL: nil)
+            } else if let pageURL {
+                wv.load(URLRequest(url: pageURL))
+            } else {
+                continuation.resume(throwing: URLError(.badURL))
+                self.continuation = nil
+            }
+        }
+    }
+
+    private func handleFinish(webView: WKWebView) {
+        let w: CGFloat = 595.28, h: CGFloat = 841.89
+        let paper = CGRect(x: 0, y: 0, width: w, height: h)
+        let printable = CGRect(x: 20, y: 20, width: w - 40, height: h - 40)
+        let renderer = UIPrintPageRenderer()
+        renderer.addPrintFormatter(webView.viewPrintFormatter(), startingAtPageAt: 0)
+        renderer.setValue(NSValue(cgRect: paper), forKey: "paperRect")
+        renderer.setValue(NSValue(cgRect: printable), forKey: "printableRect")
+        renderer.prepare(forDrawingPages: NSRange(location: 0, length: renderer.numberOfPages))
+        let pdfData = NSMutableData()
+        UIGraphicsBeginPDFContextToData(pdfData, paper, nil)
+        for i in 0..<renderer.numberOfPages {
+            UIGraphicsBeginPDFPage()
+            renderer.drawPage(at: i, in: UIGraphicsGetPDFContextBounds())
+        }
+        UIGraphicsEndPDFContext()
+        finish(result: (pdfData as Data).count > 0
+            ? .success(pdfData as Data)
+            : .failure(PDFProcessingError.writeFailed))
+    }
+
+    private func finish(result: Result<Data, Error>) {
+        switch result {
+        case .success(let data): continuation?.resume(returning: data)
+        case .failure(let error): continuation?.resume(throwing: error)
+        }
+        continuation = nil
+        webView?.navigationDelegate = nil
+        webView = nil
+    }
+}
+
+extension HTMLPDFRenderer: WKNavigationDelegate {
+    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Task { @MainActor in self.handleFinish(webView: webView) }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        Task { @MainActor in self.finish(result: .failure(error)) }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        Task { @MainActor in self.finish(result: .failure(error)) }
     }
 }

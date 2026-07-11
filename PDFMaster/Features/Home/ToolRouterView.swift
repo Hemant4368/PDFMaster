@@ -5,28 +5,46 @@ struct ToolRouterView: View {
 
     var body: some View {
         switch tool {
-        case .scanner:
-            ScannerFlowView()
-        case .imageToPDF:
-            ImageToPDFView()
-        case .pdfToImage:
-            PDFToImageView()
-        case .merge:
-            MergePDFView()
-        case .extract:
-            ExtractPagesView()
-        case .reorder:
-            ReorderPagesView()
-        case .password:
-            PasswordToolView()
-        case .watermark:
-            WatermarkToolView()
-        case .signature:
-            SignatureToolView()
-        case .annotation:
-            AnnotationToolView()
-        case .ocr:
-            OCRToolView()
+        // ORGANIZE
+        case .scanner:      ScannerFlowView()
+        case .merge:        MergePDFView()
+        case .split:        SplitPDFView()
+        case .extract:      ExtractPagesView()
+        case .removePages:  ExtractPagesView()
+        case .reorder:      ReorderPagesView()
+        // OPTIMIZE
+        case .compress:     CompressPDFView()
+        case .repair:       RepairPDFView()
+        case .ocr:          OCRToolView()
+        // CONVERT TO PDF
+        case .imageToPDF:   ImageToPDFView()
+        case .wordToPDF:    WordToPDFView()
+        case .pptToPDF:     PPTToPDFView()
+        case .excelToPDF:   ExcelToPDFView()
+        case .htmlToPDF:    HTMLToPDFView()
+        // CONVERT FROM PDF
+        case .pdfToImage:   PDFToImageView()
+        case .pdfToWord:    PDFToWordView()
+        case .pdfToPPT:     PDFToPPTView()
+        case .pdfToExcel:   PDFToExcelView()
+        case .pdfToPDFA:    PDFToPDFAView()
+        // EDIT
+        case .watermark:    WatermarkToolView()
+        case .annotation:   AnnotationToolView()
+        case .rotatePDF:    RotatePDFView()
+        case .addPageNumbers: AddPageNumbersView()
+        case .cropPDF:      CropPDFView()
+        case .editPDF:      EditPDFRouterView()
+        case .pdfForms:     PDFFormsView()
+        // SECURITY
+        case .password:     PasswordToolView()
+        case .signature:    SignatureToolView()
+        case .redactPDF:    RedactPDFView()
+        case .comparePDF:   ComparePDFView()
+        // INTELLIGENCE
+        case .aiSummarizer: AISummarizerView()
+        case .translatePDF: TranslatePDFView()
+        case .pdfToMarkdown: PDFToMarkdownView()
         }
     }
 }

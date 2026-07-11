@@ -12,17 +12,19 @@ enum PDFProcessingError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unreadableDocument: "The PDF could not be opened."
-        case .invalidPageSelection: "Choose at least one valid page."
-        case .writeFailed: "The PDF could not be written."
-        case .emptyInput: "Choose at least one file or image."
-        case .passwordRequired: "This PDF requires a password."
+        case .unreadableDocument:    "The PDF could not be opened."
+        case .invalidPageSelection:  "Choose at least one valid page."
+        case .writeFailed:           "The PDF could not be written."
+        case .emptyInput:            "Choose at least one file or image."
+        case .passwordRequired:      "This PDF requires a password."
         }
     }
 }
 
 actor PDFProcessingService {
     static let shared = PDFProcessingService()
+
+    // MARK: — Existing methods
 
     func makePDF(from images: [UIImage], quality: PDFQuality = .balanced) throws -> Data {
         guard !images.isEmpty else { throw PDFProcessingError.emptyInput }
@@ -153,9 +155,7 @@ actor PDFProcessingService {
             context.scaleBy(x: 1, y: -1)
             page.draw(with: .mediaBox, to: context)
             context.restoreGState()
-            if index == pageIndex {
-                signature.draw(in: rect)
-            }
+            if index == pageIndex { signature.draw(in: rect) }
         }
         UIGraphicsEndPDFContext()
         return output as Data
@@ -179,6 +179,180 @@ actor PDFProcessingService {
         }
     }
 
+    // MARK: — New methods
+
+    func split(url: URL, rangesString: String) throws -> [Data] {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        let ranges = try parseRanges(rangesString, pageCount: document.pageCount)
+        guard !ranges.isEmpty else { throw PDFProcessingError.invalidPageSelection }
+        return try ranges.map { indexes in
+            let part = PDFDocument()
+            for (newIndex, sourceIndex) in indexes.enumerated() {
+                guard let page = document.page(at: sourceIndex) else { throw PDFProcessingError.invalidPageSelection }
+                part.insert(page, at: newIndex)
+            }
+            guard let data = part.dataRepresentation() else { throw PDFProcessingError.writeFailed }
+            return data
+        }
+    }
+
+    func compress(url: URL, quality: PDFQuality) throws -> Data {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        let scale = quality.renderScale
+        let compression = quality.imageCompression
+        let pdfData = NSMutableData()
+        UIGraphicsBeginPDFContextToData(pdfData, .zero, nil)
+        for index in 0..<document.pageCount {
+            guard let page = document.page(at: index) else { continue }
+            let bounds = page.bounds(for: .mediaBox)
+            let size = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+            let renderer = UIGraphicsImageRenderer(size: size)
+            let image = renderer.image { ctx in
+                UIColor.white.set()
+                ctx.fill(CGRect(origin: .zero, size: size))
+                ctx.cgContext.translateBy(x: 0, y: size.height)
+                ctx.cgContext.scaleBy(x: scale, y: -scale)
+                page.draw(with: .mediaBox, to: ctx.cgContext)
+            }
+            guard let jpegData = image.jpegData(compressionQuality: compression),
+                  let compressed = UIImage(data: jpegData) else { continue }
+            UIGraphicsBeginPDFPageWithInfo(bounds, nil)
+            compressed.draw(in: CGRect(origin: .zero, size: bounds.size))
+        }
+        UIGraphicsEndPDFContext()
+        guard pdfData.length > 0 else { throw PDFProcessingError.writeFailed }
+        return pdfData as Data
+    }
+
+    func repair(url: URL) throws -> Data {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        guard let data = document.dataRepresentation() else { throw PDFProcessingError.writeFailed }
+        return data
+    }
+
+    func rotatePages(url: URL, rotation: Int, pageIndexes: [Int]) throws -> Data {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        let valid = Set(pageIndexes).filter { $0 >= 0 && $0 < document.pageCount }
+        guard !valid.isEmpty else { throw PDFProcessingError.invalidPageSelection }
+        for index in valid {
+            guard let page = document.page(at: index) else { continue }
+            page.rotation = (page.rotation + rotation) % 360
+        }
+        guard let data = document.dataRepresentation() else { throw PDFProcessingError.writeFailed }
+        return data
+    }
+
+    func addPageNumbers(url: URL, startingAt: Int, fontSize: CGFloat, position: PageNumberPosition) throws -> Data {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        let output = NSMutableData()
+        UIGraphicsBeginPDFContextToData(output, .zero, nil)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: fontSize, weight: .medium),
+            .foregroundColor: UIColor.darkGray
+        ]
+        for index in 0..<document.pageCount {
+            guard let page = document.page(at: index) else { continue }
+            let bounds = page.bounds(for: .mediaBox)
+            UIGraphicsBeginPDFPageWithInfo(bounds, nil)
+            guard let context = UIGraphicsGetCurrentContext() else { continue }
+            context.saveGState()
+            context.translateBy(x: 0, y: bounds.height)
+            context.scaleBy(x: 1, y: -1)
+            page.draw(with: .mediaBox, to: context)
+            context.restoreGState()
+            let text = NSString(string: "\(index + startingAt)")
+            let textSize = text.size(withAttributes: attributes)
+            let origin = pageNumberOrigin(position: position, textSize: textSize, pageBounds: bounds)
+            text.draw(at: origin, withAttributes: attributes)
+        }
+        UIGraphicsEndPDFContext()
+        return output as Data
+    }
+
+    func cropPages(url: URL, margins: (top: CGFloat, bottom: CGFloat, left: CGFloat, right: CGFloat)) throws -> Data {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        for index in 0..<document.pageCount {
+            guard let page = document.page(at: index) else { continue }
+            let media = page.bounds(for: .mediaBox)
+            let cropRect = CGRect(
+                x: media.minX + margins.left,
+                y: media.minY + margins.bottom,
+                width: media.width - margins.left - margins.right,
+                height: media.height - margins.top - margins.bottom
+            )
+            guard cropRect.width > 0, cropRect.height > 0 else { continue }
+            page.setBounds(cropRect, for: .cropBox)
+        }
+        guard let data = document.dataRepresentation() else { throw PDFProcessingError.writeFailed }
+        return data
+    }
+
+    func redact(url: URL, regions: [(pageIndex: Int, rect: CGRect)]) throws -> Data {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        let regionsByPage = Dictionary(grouping: regions, by: { $0.pageIndex })
+        let output = NSMutableData()
+        UIGraphicsBeginPDFContextToData(output, .zero, nil)
+        for index in 0..<document.pageCount {
+            guard let page = document.page(at: index) else { continue }
+            let bounds = page.bounds(for: .mediaBox)
+            UIGraphicsBeginPDFPageWithInfo(bounds, nil)
+            guard let context = UIGraphicsGetCurrentContext() else { continue }
+            context.saveGState()
+            context.translateBy(x: 0, y: bounds.height)
+            context.scaleBy(x: 1, y: -1)
+            page.draw(with: .mediaBox, to: context)
+            context.restoreGState()
+            if let pageRegions = regionsByPage[index] {
+                UIColor.black.setFill()
+                pageRegions.forEach { UIRectFill($0.rect) }
+            }
+        }
+        UIGraphicsEndPDFContext()
+        return output as Data
+    }
+
+    func convertToPDFA(url: URL) throws -> Data {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        var attrs = document.documentAttributes ?? [:]
+        attrs[PDFDocumentAttribute.creatorAttribute] = "PDFMaster AI"
+        attrs[PDFDocumentAttribute.creationDateAttribute] = Date()
+        document.documentAttributes = attrs
+        guard let data = document.dataRepresentation() else { throw PDFProcessingError.writeFailed }
+        return data
+    }
+
+    // MARK: — Private helpers
+
+    private func parseRanges(_ string: String, pageCount: Int) throws -> [[Int]] {
+        var result: [[Int]] = []
+        let parts = string.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        for part in parts where !part.isEmpty {
+            let bounds = part.components(separatedBy: "-")
+                .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+            guard bounds.count == 2,
+                  bounds[0] >= 1, bounds[1] <= pageCount, bounds[0] <= bounds[1] else {
+                throw PDFProcessingError.invalidPageSelection
+            }
+            result.append(Array((bounds[0] - 1)...(bounds[1] - 1)))
+        }
+        return result
+    }
+
+    private func pageNumberOrigin(position: PageNumberPosition, textSize: CGSize, pageBounds: CGRect) -> CGPoint {
+        let m: CGFloat = 20
+        let cx = (pageBounds.width - textSize.width) / 2
+        let rx = pageBounds.width - textSize.width - m
+        let by = pageBounds.height - textSize.height - m
+        return switch position {
+        case .topLeft:      CGPoint(x: m,  y: m)
+        case .topCenter:    CGPoint(x: cx, y: m)
+        case .topRight:     CGPoint(x: rx, y: m)
+        case .bottomLeft:   CGPoint(x: m,  y: by)
+        case .bottomCenter: CGPoint(x: cx, y: by)
+        case .bottomRight:  CGPoint(x: rx, y: by)
+        }
+    }
+
     private func drawWatermark(options: WatermarkOptions, in bounds: CGRect) {
         let uiColor = UIColor(options.color).withAlphaComponent(options.opacity)
         let attributes: [NSAttributedString.Key: Any] = [
@@ -199,10 +373,10 @@ actor PDFProcessingService {
     private func watermarkOrigin(for position: WatermarkPosition, textSize: CGSize, bounds: CGRect) -> CGPoint {
         let inset: CGFloat = 40
         return switch position {
-        case .topLeft: CGPoint(x: inset, y: inset)
-        case .topRight: CGPoint(x: bounds.width - textSize.width - inset, y: inset)
-        case .center: CGPoint(x: (bounds.width - textSize.width) / 2, y: (bounds.height - textSize.height) / 2)
-        case .bottomLeft: CGPoint(x: inset, y: bounds.height - textSize.height - inset)
+        case .topLeft:     CGPoint(x: inset, y: inset)
+        case .topRight:    CGPoint(x: bounds.width - textSize.width - inset, y: inset)
+        case .center:      CGPoint(x: (bounds.width - textSize.width) / 2, y: (bounds.height - textSize.height) / 2)
+        case .bottomLeft:  CGPoint(x: inset, y: bounds.height - textSize.height - inset)
         case .bottomRight: CGPoint(x: bounds.width - textSize.width - inset, y: bounds.height - textSize.height - inset)
         }
     }
