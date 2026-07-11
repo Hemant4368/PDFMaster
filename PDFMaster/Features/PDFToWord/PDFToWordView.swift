@@ -14,6 +14,7 @@ struct PDFToWordView: View {
         Form {
             Section("Input") {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 PrimaryButton(title: "Extract Text", systemImage: "doc.text") { extract() }
                     .disabled(sourceURL == nil)
             }
@@ -44,7 +45,7 @@ struct PDFToWordView: View {
         }
         .navigationTitle("PDF to Word")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first; extractedText = "" }
+            PDFSourcePickerSheet { urls in sourceURL = urls.first; extractedText = "" }
         }
         .sheet(isPresented: $showShare) {
             if let url = exportURL { ShareSheet(items: [url]) }

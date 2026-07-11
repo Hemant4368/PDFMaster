@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var renameTitle = ""
     @State private var isEditingFiles = false
     @State private var selectedDocumentIDs = Set<UUID>()
+    @State private var sortByName = false
 
     var body: some View {
             ScrollView {
@@ -122,7 +123,10 @@ struct HomeView: View {
 
     private var recentFiles: some View {
         VStack(alignment: .leading, spacing: 12) {
-            let filtered = viewModel.filtered(documents)
+            let base = viewModel.filtered(documents)
+            let filtered = sortByName
+                ? base.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+                : base
             HStack {
                 Text("All Files")
                     .font(.headline)
@@ -139,6 +143,14 @@ struct HomeView: View {
                         }
                     }
                     .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.primary)
+                } else {
+                    Button {
+                        withAnimation { sortByName.toggle() }
+                    } label: {
+                        Label(sortByName ? "A–Z" : "Recent", systemImage: sortByName ? "textformat.abc" : "clock")
+                            .font(.caption.weight(.semibold))
+                    }
                     .foregroundStyle(AppTheme.primary)
                 }
             }

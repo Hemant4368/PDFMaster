@@ -26,22 +26,44 @@ actor PDFProcessingService {
 
     // MARK: — Existing methods
 
-    func makePDF(from images: [UIImage], quality: PDFQuality = .balanced) throws -> Data {
+    func makePDF(
+        from images: [UIImage],
+        quality: PDFQuality = .balanced,
+        orientation: PDFPageOrientation = .portrait,
+        pageSize: PDFPageSize = .a4,
+        margin: PDFMarginSize = .none
+    ) throws -> Data {
         guard !images.isEmpty else { throw PDFProcessingError.emptyInput }
-        let format = UIGraphicsPDFRendererFormat()
-        let data = NSMutableData()
-        UIGraphicsBeginPDFContextToData(data, .zero, format.documentInfo)
+        let pdfData = NSMutableData()
+        UIGraphicsBeginPDFContextToData(pdfData, .zero, nil)
         for image in images {
             autoreleasepool {
-                let maxWidth: CGFloat = 1240
-                let scale = min(1, maxWidth / max(image.size.width, 1))
-                let pageSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-                UIGraphicsBeginPDFPageWithInfo(CGRect(origin: .zero, size: pageSize), nil)
-                image.draw(in: CGRect(origin: .zero, size: pageSize))
+                let pageRect = pageSize.rect(orientation: orientation, imageSize: image.size)
+                UIGraphicsBeginPDFPageWithInfo(pageRect, nil)
+                let m = margin.points
+                let draw = pageRect.insetBy(dx: m, dy: m)
+                let s = min(draw.width / max(image.size.width, 1), draw.height / max(image.size.height, 1))
+                let sw = image.size.width * s
+                let sh = image.size.height * s
+                let ox = draw.minX + (draw.width - sw) / 2
+                let oy = draw.minY + (draw.height - sh) / 2
+                let renderImage: UIImage
+                if quality == .high {
+                    renderImage = image
+                } else {
+                    let rs = quality.renderScale
+                    let rSize = CGSize(width: max(1, image.size.width * rs), height: max(1, image.size.height * rs))
+                    renderImage = UIGraphicsImageRenderer(size: rSize).image { ctx in
+                        UIColor.white.set(); ctx.fill(CGRect(origin: .zero, size: rSize))
+                        image.draw(in: CGRect(origin: .zero, size: rSize))
+                    }
+                }
+                renderImage.draw(in: CGRect(x: ox, y: oy, width: sw, height: sh))
             }
         }
         UIGraphicsEndPDFContext()
-        return data as Data
+        guard pdfData.length > 0 else { throw PDFProcessingError.writeFailed }
+        return pdfData as Data
     }
 
     func merge(_ urls: [URL]) throws -> Data {
@@ -194,6 +216,102 @@ actor PDFProcessingService {
             guard let data = part.dataRepresentation() else { throw PDFProcessingError.writeFailed }
             return data
         }
+    }
+
+    func splitFixed(url: URL, everyNPages: Int) throws -> [Data] {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        guard everyNPages >= 1 else { throw PDFProcessingError.invalidPageSelection }
+        var parts: [Data] = []
+        var start = 0
+        while start < document.pageCount {
+            let part = PDFDocument()
+            let end = min(start + everyNPages, document.pageCount)
+            for i in start..<end {
+                guard let page = document.page(at: i) else { continue }
+                part.insert(page, at: part.pageCount)
+            }
+            guard let data = part.dataRepresentation() else { throw PDFProcessingError.writeFailed }
+            parts.append(data)
+            start += everyNPages
+        }
+        return parts
+    }
+
+    func splitAllPages(url: URL) throws -> [Data] {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        return try (0..<document.pageCount).map { index in
+            guard let page = document.page(at: index) else { throw PDFProcessingError.invalidPageSelection }
+            let part = PDFDocument()
+            part.insert(page, at: 0)
+            guard let data = part.dataRepresentation() else { throw PDFProcessingError.writeFailed }
+            return data
+        }
+    }
+
+    func splitSelectedPages(url: URL, pageIndexes: [Int]) throws -> [Data] {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        return try pageIndexes.map { index in
+            guard index >= 0 && index < document.pageCount,
+                  let page = document.page(at: index) else { throw PDFProcessingError.invalidPageSelection }
+            let part = PDFDocument()
+            part.insert(page, at: 0)
+            guard let data = part.dataRepresentation() else { throw PDFProcessingError.writeFailed }
+            return data
+        }
+    }
+
+    func splitBySize(url: URL, maxBytes: Int, allowCompression: Bool) throws -> [Data] {
+        guard let document = PDFDocument(url: url) else { throw PDFProcessingError.unreadableDocument }
+        guard maxBytes > 0 else { throw PDFProcessingError.invalidPageSelection }
+        var parts: [Data] = []
+        var currentPages: [PDFPage] = []
+
+        func flush() throws {
+            guard !currentPages.isEmpty else { return }
+            let part = PDFDocument()
+            for (i, p) in currentPages.enumerated() { part.insert(p, at: i) }
+            guard var data = part.dataRepresentation() else { throw PDFProcessingError.writeFailed }
+            if allowCompression && data.count > maxBytes {
+                data = try compressPDFData(data, quality: .low)
+            }
+            parts.append(data)
+            currentPages.removeAll()
+        }
+
+        for index in 0..<document.pageCount {
+            guard let page = document.page(at: index) else { continue }
+            currentPages.append(page)
+            let trial = PDFDocument()
+            for (i, p) in currentPages.enumerated() { trial.insert(p, at: i) }
+            guard let trialData = trial.dataRepresentation() else { continue }
+            if trialData.count > maxBytes && currentPages.count > 1 {
+                currentPages.removeLast()
+                try flush()
+                currentPages.append(page)
+            }
+        }
+        try flush()
+        return parts
+    }
+
+    func merge(parts: [Data]) throws -> Data {
+        let merged = PDFDocument()
+        for data in parts {
+            guard let doc = PDFDocument(data: data) else { throw PDFProcessingError.unreadableDocument }
+            for i in 0..<doc.pageCount {
+                if let page = doc.page(at: i) { merged.insert(page, at: merged.pageCount) }
+            }
+        }
+        guard let data = merged.dataRepresentation() else { throw PDFProcessingError.writeFailed }
+        return data
+    }
+
+    private func compressPDFData(_ data: Data, quality: PDFQuality) throws -> Data {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".pdf")
+        try data.write(to: tempURL, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        return try compress(url: tempURL, quality: quality)
     }
 
     func compress(url: URL, quality: PDFQuality) throws -> Data {

@@ -18,14 +18,17 @@ struct CropPDFView: View {
         Form {
             Section("Input") {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 TextField("Output name", text: $title)
             }
 
-            Section("Crop Margins (points)") {
+            Section {
                 marginRow(label: "Top",    value: $marginTop)
                 marginRow(label: "Bottom", value: $marginBottom)
                 marginRow(label: "Left",   value: $marginLeft)
                 marginRow(label: "Right",  value: $marginRight)
+            } header: {
+                Text("Crop Margins (points)")
             } footer: {
                 Text("Cropping hides content using a crop box — it does not permanently remove page data.")
             }
@@ -37,7 +40,7 @@ struct CropPDFView: View {
         }
         .navigationTitle("Crop PDF")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first }
+            PDFSourcePickerSheet { sourceURL = $0.first }
         }
         .navigationDestination(item: $savedDocument) { PDFViewerView(document: $0) }
         .overlay { if isWorking { LoadingOverlay(title: "Cropping PDF") } }

@@ -112,3 +112,12 @@ actor FileStorageService {
         return nil
     }
 }
+
+extension FileStorageService {
+    nonisolated static func fileURL(for fileName: String) -> URL {
+        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return base
+            .appendingPathComponent("PDFMaster/Documents", isDirectory: true)
+            .appendingPathComponent(fileName)
+    }
+}

@@ -25,6 +25,7 @@ struct PDFFormsView: View {
                 Form {
                     Section {
                         Button("Choose PDF with Form Fields") { showPicker = true }
+                        if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                     } footer: {
                         Text("Open a PDF containing AcroForm fields. Tap the fields in the preview to fill them in.")
                     }
@@ -41,7 +42,7 @@ struct PDFFormsView: View {
             }
         }
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { urls in
+            PDFSourcePickerSheet { urls in
                 if let u = urls.first {
                     sourceURL = u
                     pdfDocument = PDFDocument(url: u)

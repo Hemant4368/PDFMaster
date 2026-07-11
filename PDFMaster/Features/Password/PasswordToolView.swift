@@ -16,6 +16,7 @@ struct PasswordToolView: View {
         Form {
             Section {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 Toggle("Remove password", isOn: $removePassword)
                 SecureField("Password", text: $password)
                 if !removePassword { SecureField("Confirm Password", text: $confirm) }
@@ -28,7 +29,7 @@ struct PasswordToolView: View {
         }
         .navigationTitle("PDF Password")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first }
+            PDFSourcePickerSheet { sourceURL = $0.first }
         }
         .navigationDestination(item: $savedDocument) { PDFViewerView(document: $0) }
         .alert("Password", isPresented: .constant(errorMessage != nil)) {

@@ -10,10 +10,13 @@ struct PDFToPPTView: View {
 
     var body: some View {
         Form {
-            Section("Input") {
+            Section {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 PrimaryButton(title: "Export Slides", systemImage: "rectangle.on.rectangle.angled") { exportSlides() }
                     .disabled(sourceURL == nil)
+            } header: {
+                Text("Input")
             } footer: {
                 Text("Each PDF page is exported as a JPG image. Open slides in PowerPoint or Keynote and insert the images.")
             }
@@ -31,7 +34,7 @@ struct PDFToPPTView: View {
         }
         .navigationTitle("PDF to PowerPoint")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first; slideURLs = [] }
+            PDFSourcePickerSheet { urls in sourceURL = urls.first; slideURLs = [] }
         }
         .sheet(isPresented: $showShare) {
             ShareSheet(items: slideURLs)

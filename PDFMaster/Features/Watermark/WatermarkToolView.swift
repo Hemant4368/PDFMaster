@@ -15,6 +15,7 @@ struct WatermarkToolView: View {
         Form {
             Section {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 TextField("Output name", text: $title)
                 TextField("Watermark text", text: $options.text)
                 Slider(value: $options.opacity, in: 0.05...0.85) { Text("Opacity") }
@@ -45,7 +46,7 @@ struct WatermarkToolView: View {
         }
         .navigationTitle("Watermark")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first }
+            PDFSourcePickerSheet { sourceURL = $0.first }
         }
         .navigationDestination(item: $savedDocument) { PDFViewerView(document: $0) }
         .alert("Watermark", isPresented: .constant(errorMessage != nil)) {

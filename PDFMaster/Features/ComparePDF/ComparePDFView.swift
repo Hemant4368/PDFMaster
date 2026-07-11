@@ -24,10 +24,10 @@ struct ComparePDFView: View {
         .navigationTitle("Compare PDF")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showLeftPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { leftURL = $0.first }
+            PDFSourcePickerSheet { leftURL = $0.first }
         }
         .sheet(isPresented: $showRightPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { rightURL = $0.first }
+            PDFSourcePickerSheet { rightURL = $0.first }
         }
     }
 

@@ -26,6 +26,7 @@ struct SignatureToolView: View {
             }
             Section("Apply to PDF") {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 Stepper("Page \(pageIndex + 1)", value: $pageIndex, in: 0...999)
                 TextField("Output name", text: $title)
                 HStack {
@@ -54,7 +55,7 @@ struct SignatureToolView: View {
         }
         .navigationTitle("Signatures")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first }
+            PDFSourcePickerSheet { sourceURL = $0.first }
         }
         .navigationDestination(item: $savedDocument) { PDFViewerView(document: $0) }
         .alert("Signature", isPresented: .constant(errorMessage != nil)) {

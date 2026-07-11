@@ -22,6 +22,7 @@ struct RedactPDFView: View {
         Form {
             Section("Input") {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 TextField("Output name", text: $title)
             }
 
@@ -34,7 +35,7 @@ struct RedactPDFView: View {
                     }
                 }
 
-                Section("Add Redaction Region") {
+                Section {
                     Stepper("Page \(pageIndex + 1) of \(pageCount)", value: $pageIndex, in: 0...(pageCount - 1))
                     coordinateRow(label: "X", value: $regionX)
                     coordinateRow(label: "Y", value: $regionY)
@@ -42,6 +43,8 @@ struct RedactPDFView: View {
                     coordinateRow(label: "Height", value: $regionH)
                     Button("Add Redaction") { addRegion() }
                         .foregroundStyle(AppTheme.primary)
+                } header: {
+                    Text("Add Redaction Region")
                 } footer: {
                     Text("Coordinates are in PDF points from the top-left corner of the page.")
                 }
@@ -72,7 +75,7 @@ struct RedactPDFView: View {
         .navigationTitle("Redact PDF")
         .toolbar { if !regions.isEmpty { EditButton() } }
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { urls in
+            PDFSourcePickerSheet { urls in
                 sourceURL = urls.first
                 if let u = urls.first, let pdf = PDFDocument(url: u) { pageCount = pdf.pageCount }
                 regions = []

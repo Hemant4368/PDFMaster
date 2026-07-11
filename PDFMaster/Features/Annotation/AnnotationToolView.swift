@@ -15,6 +15,7 @@ struct AnnotationToolView: View {
         Form {
             Section {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 TextField("Output name", text: $title)
                 TextField("Note text", text: $noteText)
             }
@@ -31,7 +32,7 @@ struct AnnotationToolView: View {
         }
         .navigationTitle("Annotate PDF")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first }
+            PDFSourcePickerSheet { sourceURL = $0.first }
         }
         .navigationDestination(item: $savedDocument) { PDFViewerView(document: $0) }
         .alert("Annotation", isPresented: .constant(errorMessage != nil)) {

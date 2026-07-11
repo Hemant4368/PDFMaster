@@ -19,6 +19,7 @@ struct TranslatePDFView: View {
         Form {
             Section("Input") {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
             }
 
             Section("Translation") {
@@ -66,7 +67,7 @@ struct TranslatePDFView: View {
         }
         .navigationTitle("Translate PDF")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first; translatedText = "" }
+            PDFSourcePickerSheet { urls in sourceURL = urls.first; translatedText = "" }
         }
         .overlay { if isWorking { LoadingOverlay(title: "Translating") } }
         .alert("Translate PDF", isPresented: .constant(errorMessage != nil)) {

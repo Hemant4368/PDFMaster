@@ -12,6 +12,7 @@ struct PDFToImageView: View {
         Form {
             Section {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 Picker("Format", selection: $format) {
                     ForEach(PDFExportFormat.allCases) { Text($0.rawValue).tag($0) }
                 }
@@ -30,7 +31,7 @@ struct PDFToImageView: View {
         }
         .navigationTitle("PDF to Image")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first }
+            PDFSourcePickerSheet { sourceURL = $0.first }
         }
         .overlay { if isWorking { LoadingOverlay(title: "Rendering pages") } }
         .alert("PDF to Image", isPresented: .constant(errorMessage != nil)) {

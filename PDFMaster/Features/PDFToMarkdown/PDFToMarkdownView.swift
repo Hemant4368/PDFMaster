@@ -14,6 +14,7 @@ struct PDFToMarkdownView: View {
         Form {
             Section("Input") {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 PrimaryButton(title: "Convert to Markdown", systemImage: "chevron.left.forwardslash.chevron.right") { convert() }
                     .disabled(sourceURL == nil)
             }
@@ -44,7 +45,7 @@ struct PDFToMarkdownView: View {
         }
         .navigationTitle("PDF to Markdown")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first; markdownText = "" }
+            PDFSourcePickerSheet { urls in sourceURL = urls.first; markdownText = "" }
         }
         .sheet(isPresented: $showShare) {
             if let url = exportURL { ShareSheet(items: [url]) }

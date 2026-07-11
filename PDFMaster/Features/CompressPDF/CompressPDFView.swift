@@ -21,6 +21,7 @@ struct CompressPDFView: View {
         Form {
             Section("Input") {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 if originalSize > 0 {
                     LabeledContent("Original Size", value: originalSizeLabel)
                 }
@@ -44,7 +45,7 @@ struct CompressPDFView: View {
         }
         .navigationTitle("Compress PDF")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { urls in
+            PDFSourcePickerSheet { urls in
                 sourceURL = urls.first
                 if let u = urls.first,
                    let values = try? u.resourceValues(forKeys: [.fileSizeKey]) {

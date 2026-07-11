@@ -16,6 +16,7 @@ struct ReorderPagesView: View {
         Form {
             Section {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 TextField("New PDF name", text: $title)
             }
             Section("Drag to reorder") {
@@ -42,7 +43,7 @@ struct ReorderPagesView: View {
         .navigationTitle("Reorder Pages")
         .toolbar { EditButton() }
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { urls in
+            PDFSourcePickerSheet { urls in
                 sourceURL = urls.first
                 loadPages()
             }

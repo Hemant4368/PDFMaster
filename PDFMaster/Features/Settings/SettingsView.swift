@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @AppStorage("settings.darkMode") private var darkMode = false
     @AppStorage("settings.appLockEnabled") private var appLockEnabled = false
     @AppStorage("settings.ocrLanguage") private var ocrLanguage = "en-US"
     @AppStorage("settings.pdfQuality") private var pdfQuality = PDFQuality.balanced.rawValue
@@ -17,7 +16,6 @@ struct SettingsView: View {
                     }
                 }
                 Section("Preferences") {
-                    Toggle("Dark Mode", isOn: $darkMode)
                     Picker("PDF Quality", selection: $pdfQuality) {
                         ForEach(PDFQuality.allCases) { Text($0.rawValue).tag($0.rawValue) }
                     }
@@ -38,7 +36,6 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
-            .preferredColorScheme(darkMode ? .dark : nil)
             .sheet(isPresented: $showSubscription) {
                 NavigationStack { SubscriptionView() }
             }

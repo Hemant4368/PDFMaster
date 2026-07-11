@@ -16,7 +16,7 @@ struct MergePDFView: View {
                 Button("Select PDFs") { showPicker = true }
                 TextField("Merged PDF name", text: $title)
             }
-            Section("Files") {
+            Section {
                 if urls.isEmpty {
                     Text("Choose two or more PDFs.")
                         .foregroundStyle(.secondary)
@@ -26,6 +26,25 @@ struct MergePDFView: View {
                 }
                 .onMove { urls.move(fromOffsets: $0, toOffset: $1) }
                 .onDelete { urls.remove(atOffsets: $0) }
+            } header: {
+                HStack {
+                    Text("Files (\(urls.count))")
+                    Spacer()
+                    if urls.count > 1 {
+                        Button {
+                            withAnimation {
+                                urls.sort {
+                                    $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending
+                                }
+                            }
+                        } label: {
+                            Label("Sort A–Z", systemImage: "textformat.abc")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppTheme.primary)
+                    }
+                }
             }
             Section {
                 PrimaryButton(title: "Merge PDFs", systemImage: "square.stack.3d.down.forward") { merge() }
@@ -35,7 +54,7 @@ struct MergePDFView: View {
         .navigationTitle("Merge PDFs")
         .toolbar { EditButton() }
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: true) { urls = $0 }
+            PDFSourcePickerSheet(allowsMultipleSelection: true) { picked in urls = picked }
         }
         .navigationDestination(item: $savedDocument) { PDFViewerView(document: $0) }
         .overlay { if isWorking { LoadingOverlay(title: "Merging PDFs") } }

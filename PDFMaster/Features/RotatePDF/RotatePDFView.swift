@@ -27,6 +27,7 @@ struct RotatePDFView: View {
         Form {
             Section("Input") {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 TextField("Output name", text: $title)
             }
 
@@ -44,9 +45,18 @@ struct RotatePDFView: View {
                     Text(selectedPages.isEmpty ? "All \(pageCount) pages will be rotated" : "\(selectedPages.count) page(s) selected")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 64))], spacing: 12) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 76))], spacing: 14) {
                         ForEach(0..<pageCount, id: \.self) { index in
-                            pageChip(index: index)
+                            if let sourceURL {
+                                PageThumbnailChip(
+                                    pdfURL: sourceURL,
+                                    index: index,
+                                    isSelected: selectedPages.contains(index)
+                                ) {
+                                    if selectedPages.contains(index) { selectedPages.remove(index) }
+                                    else { selectedPages.insert(index) }
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 4)
@@ -60,7 +70,7 @@ struct RotatePDFView: View {
         }
         .navigationTitle("Rotate PDF")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { urls in
+            PDFSourcePickerSheet { urls in
                 sourceURL = urls.first
                 if let u = urls.first, let pdf = PDFDocument(url: u) { pageCount = pdf.pageCount }
                 selectedPages.removeAll()
@@ -71,21 +81,6 @@ struct RotatePDFView: View {
         .alert("Rotate PDF", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
-    }
-
-    @ViewBuilder private func pageChip(index: Int) -> some View {
-        let selected = selectedPages.contains(index)
-        Button {
-            if selected { selectedPages.remove(index) } else { selectedPages.insert(index) }
-        } label: {
-            Text("\(index + 1)")
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                .frame(width: 48, height: 48)
-                .background(selected ? AppTheme.primary : Color(.secondarySystemBackground))
-                .foregroundStyle(selected ? .white : .primary)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
     }
 
     private func rotate() {

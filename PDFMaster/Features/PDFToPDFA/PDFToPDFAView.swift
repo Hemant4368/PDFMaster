@@ -14,6 +14,7 @@ struct PDFToPDFAView: View {
         Form {
             Section("Input") {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 TextField("Output name", text: $title)
             }
 
@@ -26,7 +27,7 @@ struct PDFToPDFAView: View {
         }
         .navigationTitle("PDF to PDF/A")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first }
+            PDFSourcePickerSheet { sourceURL = $0.first }
         }
         .navigationDestination(item: $savedDocument) { PDFViewerView(document: $0) }
         .overlay { if isWorking { LoadingOverlay(title: "Converting") } }

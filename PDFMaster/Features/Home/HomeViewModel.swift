@@ -12,9 +12,8 @@ final class HomeViewModel: ObservableObject {
     @Published var isImporting = false
 
     func filtered(_ documents: [DocumentRecord]) -> [DocumentRecord] {
-        let sorted = documents.sorted { $0.updatedAt > $1.updatedAt }
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return sorted }
-        return sorted.filter { $0.title.localizedCaseInsensitiveContains(query) }
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return documents }
+        return documents.filter { $0.title.localizedCaseInsensitiveContains(query) }
     }
 
     func loadThumbnails(for documents: [DocumentRecord]) {

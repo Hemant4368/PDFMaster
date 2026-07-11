@@ -49,6 +49,42 @@ enum PDFQuality: String, CaseIterable, Identifiable {
     }
 }
 
+enum PDFPageOrientation: String, CaseIterable, Identifiable {
+    case portrait = "Portrait", landscape = "Landscape"
+    var id: String { rawValue }
+}
+
+enum PDFPageSize: String, CaseIterable, Identifiable {
+    case a4 = "A4 (297×210 mm)", fit = "Fit", usLetter = "US Letter (215×279 mm)"
+    var id: String { rawValue }
+
+    func rect(orientation: PDFPageOrientation, imageSize: CGSize = .zero) -> CGRect {
+        let base: CGSize
+        switch self {
+        case .a4:       base = CGSize(width: 595.28, height: 841.89)
+        case .usLetter: base = CGSize(width: 612, height: 792)
+        case .fit:
+            let maxW: CGFloat = 595.28
+            let scale = imageSize.width > 0 ? min(1, maxW / imageSize.width) : 1
+            return CGRect(origin: .zero, size: CGSize(width: imageSize.width * scale, height: imageSize.height * scale))
+        }
+        switch orientation {
+        case .portrait:
+            let s = base.width <= base.height ? base : CGSize(width: base.height, height: base.width)
+            return CGRect(origin: .zero, size: s)
+        case .landscape:
+            let s = base.width >= base.height ? base : CGSize(width: base.height, height: base.width)
+            return CGRect(origin: .zero, size: s)
+        }
+    }
+}
+
+enum PDFMarginSize: String, CaseIterable, Identifiable {
+    case none = "No margin", small = "Small", big = "Big"
+    var id: String { rawValue }
+    var points: CGFloat { switch self { case .none: 0; case .small: 18; case .big: 36 } }
+}
+
 enum PageNumberPosition: String, CaseIterable, Identifiable {
     case bottomCenter = "Bottom Center"
     case bottomLeft   = "Bottom Left"

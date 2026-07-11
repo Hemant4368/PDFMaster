@@ -14,6 +14,7 @@ struct PDFToExcelView: View {
         Form {
             Section {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 PrimaryButton(title: "Extract Table Data", systemImage: "chart.bar.doc.horizontal") { extract() }
                     .disabled(sourceURL == nil)
             } header: {
@@ -45,7 +46,7 @@ struct PDFToExcelView: View {
         }
         .navigationTitle("PDF to Excel")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first; csvText = "" }
+            PDFSourcePickerSheet { urls in sourceURL = urls.first; csvText = "" }
         }
         .sheet(isPresented: $showShare) {
             if let url = exportURL { ShareSheet(items: [url]) }

@@ -14,6 +14,7 @@ struct AISummarizerView: View {
         Form {
             Section("Input") {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 PrimaryButton(title: "Summarize", systemImage: "sparkles.rectangle.stack") { summarize() }
                     .disabled(sourceURL == nil || apiKey.isEmpty)
             }
@@ -56,7 +57,7 @@ struct AISummarizerView: View {
         }
         .navigationTitle("AI Summarizer")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { sourceURL = $0.first; summary = "" }
+            PDFSourcePickerSheet { urls in sourceURL = urls.first; summary = "" }
         }
         .overlay { if isWorking { LoadingOverlay(title: "Summarizing") } }
         .alert("AI Summarizer", isPresented: .constant(errorMessage != nil)) {

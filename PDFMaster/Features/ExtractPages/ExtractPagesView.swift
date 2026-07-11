@@ -16,25 +16,26 @@ struct ExtractPagesView: View {
         Form {
             Section {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
+                if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 TextField("New PDF name", text: $title)
             }
             if pageCount > 0 {
                 Section("Pages") {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 70))]) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 76))], spacing: 14) {
                         ForEach(0..<pageCount, id: \.self) { index in
-                            Button {
-                                if selected.contains(index) { selected.remove(index) } else { selected.insert(index) }
-                            } label: {
-                                Text("\(index + 1)")
-                                    .font(.headline)
-                                    .frame(width: 54, height: 54)
-                                    .background(selected.contains(index) ? AppTheme.primary : Color(.secondarySystemBackground))
-                                    .foregroundStyle(selected.contains(index) ? .white : .primary)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                            if let sourceURL {
+                                PageThumbnailChip(
+                                    pdfURL: sourceURL,
+                                    index: index,
+                                    isSelected: selected.contains(index)
+                                ) {
+                                    if selected.contains(index) { selected.remove(index) }
+                                    else { selected.insert(index) }
+                                }
                             }
-                            .buttonStyle(.plain)
                         }
                     }
+                    .padding(.vertical, 4)
                 }
             }
             Section {
@@ -48,7 +49,7 @@ struct ExtractPagesView: View {
         }
         .navigationTitle("Extract Pages")
         .sheet(isPresented: $showPicker) {
-            DocumentPickerView(allowsMultipleSelection: false) { urls in
+            PDFSourcePickerSheet { urls in
                 sourceURL = urls.first
                 if let sourceURL, let pdf = PDFDocument(url: sourceURL) { pageCount = pdf.pageCount }
                 selected.removeAll()
