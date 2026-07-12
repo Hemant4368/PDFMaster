@@ -9,6 +9,7 @@ struct PDFToExcelView: View {
     @State private var showShare = false
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var options = PDFToExcelOptions()
 
     var body: some View {
         Form {
@@ -21,6 +22,21 @@ struct PDFToExcelView: View {
                 Text("Input")
             } footer: {
                 Text("Extracts text as CSV. Works best with PDFs containing tabular data.")
+            }
+
+            if sourceURL != nil {
+                Section("Options") {
+                    Picker("Delimiter", selection: $options.delimiter) {
+                        ForEach(CSVDelimiter.allCases) { d in
+                            Text(d.rawValue).tag(d)
+                        }
+                    }
+                    Picker("Page Range", selection: $options.pageRange) {
+                        ForEach(PageRange.allCases) { r in
+                            Text(r.rawValue).tag(r)
+                        }
+                    }
+                }
             }
 
             if !csvText.isEmpty {
@@ -69,19 +85,26 @@ struct PDFToExcelView: View {
                 } else {
                     rawText = try await OCRService.shared.recognizeText(inPDF: sourceURL, languages: ["en-US"])
                 }
-                csvText = convertToCSV(rawText)
+                csvText = convertToCSV(rawText, delimiter: options.delimiter)
                 if csvText.isEmpty { errorMessage = "No extractable data found in this PDF." }
             } catch { errorMessage = error.localizedDescription }
         }
     }
 
-    private func convertToCSV(_ text: String) -> String {
-        text.components(separatedBy: .newlines)
+    private func convertToCSV(_ text: String, delimiter: CSVDelimiter) -> String {
+        let sep: String = {
+            switch delimiter {
+            case .comma:     return ","
+            case .tab:       return "\t"
+            case .semicolon: return ";"
+            }
+        }()
+        return text.components(separatedBy: .newlines)
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             .map { line in
                 let cells = line.components(separatedBy: "  ").filter { !$0.isEmpty }
                 return cells.count > 1
-                    ? cells.map { "\"\($0.trimmingCharacters(in: .whitespaces))\"" }.joined(separator: ",")
+                    ? cells.map { "\"\($0.trimmingCharacters(in: .whitespaces))\"" }.joined(separator: sep)
                     : "\"\(line.trimmingCharacters(in: .whitespaces))\""
             }
             .joined(separator: "\n")

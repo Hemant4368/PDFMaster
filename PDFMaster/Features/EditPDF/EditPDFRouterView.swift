@@ -8,6 +8,7 @@ struct EditPDFRouterView: View {
     @State private var savedDocument: DocumentRecord?
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var importRange: PageRange = .all
 
     var body: some View {
         Form {
@@ -21,6 +22,14 @@ struct EditPDFRouterView: View {
             }
 
             if sourceURL != nil {
+                Section("Options") {
+                    Picker("Import", selection: $importRange) {
+                        ForEach(PageRange.allCases) { r in
+                            Text(r.rawValue).tag(r)
+                        }
+                    }
+                }
+
                 Section {
                     PrimaryButton(title: "Open in Editor", systemImage: "square.and.pencil") { openEditor() }
                 }

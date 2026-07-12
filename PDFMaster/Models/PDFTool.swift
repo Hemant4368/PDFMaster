@@ -72,8 +72,6 @@ enum PDFTool: String, CaseIterable, Identifiable {
     case comparePDF     = "Compare PDF"
 
     // INTELLIGENCE
-    case aiSummarizer   = "AI Summarizer"
-    case translatePDF   = "Translate PDF"
     case pdfToMarkdown  = "PDF to Markdown"
 
     var id: String { rawValue }
@@ -92,7 +90,7 @@ enum PDFTool: String, CaseIterable, Identifiable {
             return .edit
         case .password, .signature, .redactPDF, .comparePDF:
             return .security
-        case .aiSummarizer, .translatePDF, .pdfToMarkdown:
+        case .pdfToMarkdown:
             return .intelligence
         }
     }
@@ -140,8 +138,7 @@ enum PDFTool: String, CaseIterable, Identifiable {
         case .redactPDF:      "rectangle.fill.on.rectangle.fill"
         case .comparePDF:     "arrow.left.arrow.right.square"
         // Intelligence
-        case .aiSummarizer:   "sparkles.rectangle.stack"
-        case .translatePDF:   "character.book.closed"
+
         case .pdfToMarkdown:  "chevron.left.forwardslash.chevron.right"
         }
     }

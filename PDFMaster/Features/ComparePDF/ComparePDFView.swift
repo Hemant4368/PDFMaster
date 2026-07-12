@@ -5,10 +5,16 @@ struct ComparePDFView: View {
     @State private var rightURL: URL?
     @State private var showLeftPicker = false
     @State private var showRightPicker = false
+    @State private var options = CompareOptions()
+    @State private var showOptions = false
 
     var body: some View {
         VStack(spacing: 0) {
             selectorBar
+            if showOptions {
+                optionsBar
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
             Divider()
 
             if leftURL != nil || rightURL != nil {
@@ -23,12 +29,35 @@ struct ComparePDFView: View {
         }
         .navigationTitle("Compare PDF")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.80)) {
+                        showOptions.toggle()
+                    }
+                } label: {
+                    Image(systemName: "gear")
+                        .foregroundStyle(showOptions ? AppTheme.primary : .secondary)
+                }
+            }
+        }
         .sheet(isPresented: $showLeftPicker) {
             PDFSourcePickerSheet { leftURL = $0.first }
         }
         .sheet(isPresented: $showRightPicker) {
             PDFSourcePickerSheet { rightURL = $0.first }
         }
+    }
+
+    private var optionsBar: some View {
+        VStack(spacing: 8) {
+            Toggle("Sync Scrolling", isOn: $options.syncScroll)
+            Toggle("Continuous Scroll", isOn: $options.continuousScroll)
+            Toggle("Show Page Numbers", isOn: $options.showPageNumbers)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color(.secondarySystemBackground))
     }
 
     private var selectorBar: some View {

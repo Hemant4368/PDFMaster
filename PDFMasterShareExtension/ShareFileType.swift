@@ -29,8 +29,6 @@ struct ShareFileType {
                 ToolItem(key: "Signature",        name: "Sign PDF",           icon: "signature"),
                 ToolItem(key: "Extract Pages",    name: "Extract Pages",      icon: "doc.on.doc.fill"),
                 ToolItem(key: "Redact PDF",       name: "Redact PDF",         icon: "rectangle.fill.on.rectangle.fill"),
-                ToolItem(key: "AI Summarizer",    name: "AI Summarize",       icon: "sparkles.rectangle.stack"),
-                ToolItem(key: "Translate PDF",    name: "Translate PDF",      icon: "character.book.closed"),
                 ToolItem(key: "PDF to Markdown",  name: "PDF to Markdown",    icon: "chevron.left.forwardslash.chevron.right"),
             ])
 

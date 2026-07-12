@@ -138,3 +138,59 @@ enum PageNumberPosition: String, CaseIterable, Identifiable {
     case topRight     = "Top Right"
     var id: String { rawValue }
 }
+
+// MARK: - Compare PDF
+struct CompareOptions: Equatable {
+    var syncScroll: Bool = true
+    var continuousScroll: Bool = false
+    var showPageNumbers: Bool = true
+}
+
+// MARK: - Office → PDF (Word, PPT, Excel)
+struct OfficeConversionOptions: Equatable {
+    var outputName: String = ""
+    var orientation: PDFPageOrientation = .portrait
+    var quality: PDFQuality = .balanced
+    var margin: PDFMarginSize = .small
+}
+
+// MARK: - PDF → Word
+struct PDFToWordOptions: Equatable {
+    var ocrLanguages: [String] = ["en-US"]
+    var outputFormat: WordOutputFormat = .rtf
+    var pageRange: PageRange = .all
+}
+
+enum WordOutputFormat: String, CaseIterable, Identifiable {
+    case rtf = "RTF (Word-compatible)"
+    case txt = "Plain Text"
+    var id: String { rawValue }
+}
+
+// MARK: - PDF → Excel
+struct PDFToExcelOptions: Equatable {
+    var ocrLanguages: [String] = ["en-US"]
+    var delimiter: CSVDelimiter = .comma
+    var pageRange: PageRange = .all
+}
+
+enum CSVDelimiter: String, CaseIterable, Identifiable {
+    case comma     = "Comma (,)"
+    case tab       = "Tab"
+    case semicolon = "Semicolon (;)"
+    var id: String { rawValue }
+}
+
+// MARK: - PDF → PowerPoint
+struct PDFToPPTOptions: Equatable {
+    var imageFormat: PDFExportFormat = .jpg
+    var quality: PDFQuality = .balanced
+    var pageRange: PageRange = .all
+}
+
+// MARK: - Shared
+enum PageRange: String, CaseIterable, Identifiable {
+    case all    = "All Pages"
+    case custom = "Custom Range"
+    var id: String { rawValue }
+}

@@ -4,6 +4,7 @@ struct PPTToPDFView: View {
     @State private var sourceURL: URL?
     @State private var showPicker = false
     @State private var showPreview = false
+    @State private var options = OfficeConversionOptions()
 
     var body: some View {
         Form {
@@ -14,6 +15,25 @@ struct PPTToPDFView: View {
             }
 
             if sourceURL != nil {
+                Section("Options") {
+                    TextField("Output Name", text: $options.outputName)
+                    Picker("Orientation", selection: $options.orientation) {
+                        ForEach(PDFPageOrientation.allCases) { orient in
+                            Text(orient.rawValue).tag(orient)
+                        }
+                    }
+                    Picker("Quality", selection: $options.quality) {
+                        ForEach(PDFQuality.allCases) { q in
+                            Text(q.rawValue).tag(q)
+                        }
+                    }
+                    Picker("Margin", selection: $options.margin) {
+                        ForEach(PDFMarginSize.allCases) { m in
+                            Text(m.rawValue).tag(m)
+                        }
+                    }
+                }
+
                 Section {
                     PrimaryButton(title: "Preview & Convert", systemImage: "play.rectangle") {
                         showPreview = true
