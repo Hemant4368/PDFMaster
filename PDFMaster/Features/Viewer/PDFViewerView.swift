@@ -1,14 +1,10 @@
 import PDFKit
-import PencilKit
-import SwiftData
 import SwiftUI
-import PhotosUI
 
 struct PDFViewerView: View {
     let document: DocumentRecord
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
     @State private var url: URL?
     @State private var pdfDocument: PDFDocument?
     @State private var currentPageIndex = 0
@@ -16,73 +12,12 @@ struct PDFViewerView: View {
     @State private var shareURL: URL?
     @State private var thumbnails: [UIImage] = []
     @State private var showThumbnails = false
-    @State private var hasUnsavedChanges = false
-    @State private var isSaving = false
-    @State private var showReorderSheet = false
-    @State private var reorderIndexes: [Int] = []
-    @State private var showDeletePageConfirmation = false
-    @State private var errorMessage: String?
     @State private var loadError: String?
-    @State private var showImagePicker = false
-    @State private var showLinkSheet = false
-    @State private var photoItem: PhotosPickerItem?
-    @State private var showCalibration = false
-    @State private var calibrateKnownLength: String = ""
-    @State private var showBackWarning = false
-    @State private var lastEditMode: EditorMode = .annotate
-    @StateObject private var editorVM = PDFEditorViewModel()
-
-    private var isEditing: Bool { editorVM.editorMode != .view }
 
     var body: some View {
         Group {
             if let pdfDocument {
-                ZStack {
-                    pdfContainer(pdfDocument)
-                        .ignoresSafeArea(.all, edges: isEditing ? .bottom : [])
-
-                    VStack(spacing: 0) {
-                        unsavedBanner
-                            .padding(.top, 4)
-                        Spacer()
-                    }
-
-                    if isEditing {
-                        VStack(spacing: 0) {
-                            Spacer()
-                            PDFEditorToolbar(
-                                viewModel: editorVM,
-                                documentPageCount: pdfDocument.pageCount,
-                                currentPageIndex: currentPageIndex,
-                                onSave: saveEditedPDF,
-                                onPrint: { if let url { PrintController.printPDF(url: url) } },
-                                onAddPage: addPage,
-                                onDeletePage: { showDeletePageConfirmation = true },
-                                onReorder: prepareReorder,
-                                onMarkupApply: { editorVM.applyMarkupFromSelection(); markEdited() },
-                                onApplyRedactions: { editorVM.applyRedactions(to: pdfDocument); markEdited() },
-                                onCalibrate: { showCalibration = true },
-                                onCompletePolygon: { completePolygon() },
-                                onDoneEditing: { exitEditMode() }
-                            )
-                            .ignoresSafeArea(.keyboard)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
-                    } else {
-                        VStack(spacing: 0) {
-                            Spacer()
-                            editFloatingButton
-                                .padding(.bottom, 20)
-                                .transition(.scale.combined(with: .opacity))
-                        }
-                    }
-
-                    if isSaving {
-                        LoadingOverlay(title: "Saving PDF")
-                            .transition(.opacity.animation(.easeInOut(duration: 0.2)))
-                    }
-                }
-                .animation(.spring(response: 0.3, dampingFraction: 0.85), value: isEditing)
+                pdfContainer(pdfDocument)
             } else if let loadError {
                 ContentUnavailableView(
                     "Failed to Load PDF",
@@ -97,20 +32,11 @@ struct PDFViewerView: View {
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        .toolbarBackground(isEditing ? .hidden : .automatic)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                HStack(spacing: 4) {
-                    Button {
-                        if hasUnsavedChanges { showBackWarning = true }
-                        else { dismiss() }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    Button { editorVM.showSidebar = true } label: {
-                        Image(systemName: "list.bullet.rectangle")
-                    }
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
                 }
             }
             ToolbarItem(placement: .principal) {
@@ -126,10 +52,12 @@ struct PDFViewerView: View {
                 }
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { withAnimation(.spring(response: 0.3)) {
-                    showThumbnails.toggle()
-                    if showThumbnails { loadThumbnails() }
-                } } label: {
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        showThumbnails.toggle()
+                        if showThumbnails { loadThumbnails() }
+                    }
+                } label: {
                     Image(systemName: "square.grid.2x2")
                         .fontWeight(showThumbnails ? .bold : .regular)
                 }
@@ -141,83 +69,7 @@ struct PDFViewerView: View {
                 }
             }
         }
-        .confirmationDialog("Unsaved Changes", isPresented: $showBackWarning, titleVisibility: .visible) {
-            Button("Discard Changes", role: .destructive) { dismiss() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("You have unsaved changes. Discard them?")
-        }
-        .photosPicker(isPresented: $showImagePicker, selection: $photoItem, matching: .images)
-        .onChange(of: photoItem) { _, newItem in
-            guard let newItem else { return }
-            Task {
-                guard let data = try? await newItem.loadTransferable(type: Data.self),
-                      let image = UIImage(data: data),
-                      let pending = editorVM.pendingTapPoint else { return }
-                editorVM.placeImageAnnotation(image, at: pending.0, on: pending.1)
-                markEdited()
-            }
-        }
-        .sheet(isPresented: $showLinkSheet) { linkSheet }
-        .alert("Calibrate Measurement", isPresented: $showCalibration) {
-            TextField("Known length", text: $calibrateKnownLength)
-                .keyboardType(.decimalPad)
-            Button("Set") {
-                if let val = Double(calibrateKnownLength), val > 0 {
-                    editorVM.measurementScale = 72 / val
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Enter the real-world length for 72 points (1 inch):")
-        }
         .sheet(item: $shareURL) { ShareSheet(items: [$0]) }
-        .sheet(isPresented: $editorVM.showSignatureSheet) {
-            PDFSignatureSheet(viewModel: editorVM)
-        }
-        .sheet(isPresented: $showReorderSheet) { reorderSheet }
-        .sheet(isPresented: $editorVM.showInspector) {
-            PDFAnnotationInspector(viewModel: editorVM)
-        }
-        .sheet(isPresented: $editorVM.showStampPicker) {
-            PDFStampPicker(viewModel: editorVM)
-        }
-        .sheet(isPresented: $editorVM.showSearchPanel) {
-            PDFSearchPanel(viewModel: editorVM)
-        }
-        .sheet(isPresented: $editorVM.showSidebar) {
-            AnnotationSidebar(viewModel: editorVM)
-        }
-        .sheet(isPresented: $editorVM.showNoteEditor) {
-            if let annotation = editorVM.noteToEdit {
-                AnnotationNoteEditor(viewModel: editorVM, annotation: annotation)
-            }
-        }
-        .alert("Add Text", isPresented: $editorVM.showTextInput) {
-            TextField("Text", text: $editorVM.textInputValue)
-            Button("Cancel", role: .cancel) { editorVM.pendingTapPoint = nil }
-            Button("Add") { editorVM.confirmTextAnnotation(); markEdited() }
-        } message: {
-            Text("Tap a location on the PDF to place this text.")
-        }
-        .confirmationDialog("Delete this page?", isPresented: $showDeletePageConfirmation, titleVisibility: .visible) {
-            Button("Delete Page", role: .destructive) { deleteCurrentPage() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Page \(currentPageIndex + 1) will be removed from this PDF.")
-        }
-        .alert("PDF Viewer", isPresented: .constant(errorMessage != nil)) {
-            Button("OK") { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "")
-        }
-        .onChange(of: editorVM.searchText) {
-            guard editorVM.showSearchPanel, let pdfDocument else { return }
-            editorVM.performSearch(in: pdfDocument)
-        }
-        .onReceive(editorVM.storage.$editCount.dropFirst()) { _ in
-            markEdited()
-        }
         .preferredColorScheme(.light)
     }
 
@@ -229,83 +81,13 @@ struct PDFViewerView: View {
                 thumbnailStrip
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
-            InteractivePDFKitView(
+            EditablePDFKitView(
                 document: pdf,
                 currentPageIndex: $currentPageIndex,
-                reloadToken: reloadToken,
-                editorViewModel: editorVM,
-                isEditing: isEditing
+                reloadToken: reloadToken
             )
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: showThumbnails)
-    }
-
-    // MARK: - Edit Button
-
-    private var editFloatingButton: some View {
-        Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                editorVM.editorMode = lastEditMode
-                if lastEditMode == .signature { editorVM.showSignatureSheet = true }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "pencil.tip")
-                    .font(.system(size: 15, weight: .semibold))
-                Text("Edit")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 14)
-            .background(
-                Capsule()
-                    .fill(AppTheme.primary)
-                    .shadow(color: AppTheme.primary.opacity(0.35), radius: 12, y: 4)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Unsaved Banner
-
-    private var unsavedBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "circle.fill")
-                .font(.system(size: 6))
-                .foregroundStyle(.orange)
-                .opacity(hasUnsavedChanges ? 1 : 0)
-
-            Text("Unsaved changes")
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.orange)
-
-            Spacer()
-
-            Button {
-                saveEditedPDF()
-            } label: {
-                Text("Save")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(
-                        Capsule()
-                            .fill(AppTheme.primary)
-                            .shadow(color: AppTheme.primary.opacity(0.3), radius: 4, y: 1)
-                    )
-            }
-            .buttonStyle(.plain)
-            .opacity(hasUnsavedChanges ? 1 : 0)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding(.horizontal, 12)
-        .opacity(hasUnsavedChanges ? 1 : 0)
-        .offset(y: hasUnsavedChanges ? 0 : -20)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: hasUnsavedChanges)
     }
 
     // MARK: - Loading
@@ -337,10 +119,9 @@ struct PDFViewerView: View {
                                 if index == currentPageIndex {
                                     RoundedRectangle(cornerRadius: 6)
                                         .stroke(AppTheme.primary, lineWidth: 2.5)
-                                        .shadow(color: AppTheme.primary.opacity(0.3), radius: 3)
                                 } else {
                                     RoundedRectangle(cornerRadius: 6)
-                                        .stroke(.separator, lineWidth: 0.5)
+                                        .stroke(Color(.separator), lineWidth: 0.5)
                                 }
                             }
                             .shadow(color: .black.opacity(0.06), radius: 2, y: 1)
@@ -349,7 +130,7 @@ struct PDFViewerView: View {
                             .foregroundStyle(index == currentPageIndex ? AppTheme.primary : .secondary)
                     }
                     .scaleEffect(index == currentPageIndex ? 1.05 : 1)
-                    .onTapGesture { goToPage(index) }
+                    .onTapGesture { currentPageIndex = index }
                 }
             }
             .padding(.horizontal)
@@ -358,94 +139,7 @@ struct PDFViewerView: View {
         .background(.regularMaterial)
     }
 
-    // MARK: - Sheets
-
-    private var linkSheet: some View {
-        NavigationStack {
-            Form {
-                Picker("Type", selection: $editorVM.linkTarget.type) {
-                    ForEach(LinkType.allCases) { type in
-                        Text(type.rawValue).tag(type)
-                    }
-                }
-                TextField("URL / Email", text: $editorVM.linkTarget.urlString)
-                    .keyboardType(.URL)
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
-                if editorVM.linkTarget.type == .page {
-                    Stepper("Page: \(editorVM.linkTarget.pageIndex + 1)",
-                            value: $editorVM.linkTarget.pageIndex, in: 0...(pdfDocument?.pageCount ?? 1) - 1)
-                }
-            }
-            .navigationTitle("Link Target")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { editorVM.pendingTapPoint = nil; showLinkSheet = false }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Add") {
-                        if let (point, page) = editorVM.pendingTapPoint {
-                            editorVM.placeLinkAnnotation(editorVM.linkTarget, at: point, on: page)
-                            markEdited()
-                        }
-                        showLinkSheet = false
-                    }
-                    .disabled(editorVM.linkTarget.urlString.isEmpty && editorVM.linkTarget.type != .page)
-                    .fontWeight(.semibold)
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-
-    private var reorderSheet: some View {
-        NavigationStack {
-            List {
-                ForEach(reorderIndexes, id: \.self) { index in
-                    HStack {
-                        if let page = pdfDocument?.page(at: index) {
-                            Image(uiImage: page.thumbnail(of: CGSize(width: 70, height: 92), for: .cropBox))
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 42, height: 56)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                        }
-                        Text("Page \(index + 1)")
-                    }
-                }
-                .onMove { reorderIndexes.move(fromOffsets: $0, toOffset: $1) }
-            }
-            .navigationTitle("Reorder Pages")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { showReorderSheet = false }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Apply") { applyReorder() }
-                        .fontWeight(.semibold)
-                }
-            }
-        }
-    }
-
     // MARK: - Actions
-
-    private func completePolygon() {
-        guard let pdfDocument, let page = pdfDocument.page(at: currentPageIndex) else { return }
-        editorVM.completePolygon(on: page)
-        markEdited()
-    }
-
-    private func exitEditMode() {
-        lastEditMode = editorVM.editorMode
-        if hasUnsavedChanges { saveEditedPDF() }
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-            editorVM.editorMode = .view
-            editorVM.selectionManager.deselectAll()
-        }
-    }
 
     private func loadDocument() async {
         let fileURL = await FileStorageService.shared.url(for: document.fileName)
@@ -457,85 +151,30 @@ struct PDFViewerView: View {
         loadThumbnails()
     }
 
-    private func markEdited() {
-        hasUnsavedChanges = true
-        thumbnails.removeAll()
-        loadThumbnails()
-        reloadToken = UUID()
-    }
-
-    private func addPage() {
-        guard let pdfDocument else { return }
-        let size = pdfDocument.page(at: currentPageIndex)?.bounds(for: .mediaBox).size ?? CGSize(width: 612, height: 792)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let image = renderer.image { context in
-            UIColor.white.setFill()
-            context.fill(CGRect(origin: .zero, size: size))
-        }
-        guard let page = PDFPage(image: image) else { return }
-        pdfDocument.insert(page, at: min(currentPageIndex + 1, pdfDocument.pageCount))
-        currentPageIndex = max(0, min(currentPageIndex + 1, pdfDocument.pageCount - 1))
-        markEdited()
-    }
-
-    private func prepareReorder() {
-        guard let pdfDocument else { return }
-        reorderIndexes = Array(0..<pdfDocument.pageCount)
-        showReorderSheet = true
-    }
-
-    private func applyReorder() {
-        guard let pdfDocument else { return }
-        let output = PDFDocument()
-        for (newIndex, oldIndex) in reorderIndexes.enumerated() {
-            if let page = pdfDocument.page(at: oldIndex) {
-                output.insert(page, at: newIndex)
-            }
-        }
-        self.pdfDocument = output
-        currentPageIndex = 0
-        showReorderSheet = false
-        markEdited()
-    }
-
-    private func deleteCurrentPage() {
-        guard let pdfDocument else { return }
-        guard pdfDocument.pageCount > 1 else {
-            errorMessage = "A PDF must contain at least one page."
-            return
-        }
-        let deletedIndex = min(max(currentPageIndex, 0), pdfDocument.pageCount - 1)
-        pdfDocument.removePage(at: deletedIndex)
-        currentPageIndex = max(0, min(deletedIndex, pdfDocument.pageCount - 1))
-        markEdited()
-    }
-
-    private func saveEditedPDF() {
-        guard let pdfDocument, let url, let data = pdfDocument.dataRepresentation() else { return }
-        Task {
-            isSaving = true
-            defer { isSaving = false }
-            do {
-                try data.write(to: url, options: .atomic)
-                document.pageCount = pdfDocument.pageCount
-                document.fileSize = await FileStorageService.shared.fileSize(at: url)
-                document.updatedAt = .now
-                try modelContext.save()
-                hasUnsavedChanges = false
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
     private func loadThumbnails() {
         guard thumbnails.isEmpty, let pdfDocument else { return }
-        thumbnails = (0..<pdfDocument.pageCount).compactMap {
-            pdfDocument.page(at: $0)?.thumbnail(of: CGSize(width: 90, height: 120), for: .cropBox)
+        let totalPages = pdfDocument.pageCount
+        thumbnails = []
+        Task.detached(priority: .utility) { [weak pdfDocument] in
+            guard let doc = pdfDocument else { return }
+            for start in stride(from: 0, to: totalPages, by: 20) {
+                let end = min(start + 20, totalPages)
+                var batch: [(Int, UIImage)] = []
+                for i in start..<end {
+                    if let page = doc.page(at: i) {
+                        batch.append((i, page.thumbnail(of: CGSize(width: 48, height: 64), for: .cropBox)))
+                    }
+                }
+                await MainActor.run { [batch] in
+                    for (idx, img) in batch {
+                        if self.thumbnails.indices.contains(idx) {
+                            self.thumbnails[idx] = img
+                        } else {
+                            self.thumbnails.append(img)
+                        }
+                    }
+                }
+            }
         }
-    }
-
-    private func goToPage(_ index: Int) {
-        currentPageIndex = index
     }
 }

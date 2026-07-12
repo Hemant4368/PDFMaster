@@ -147,7 +147,7 @@ struct PDFSignatureSheet: View {
         switch selectedTab {
         case 0:
             guard !canvasView.drawing.bounds.isEmpty else { return }
-            let image = canvasView.drawing.image(from: canvasView.drawing.bounds, scale: UIScreen.main.scale)
+            let image = canvasView.drawing.image(from: canvasView.drawing.bounds, scale: UITraitCollection.current.displayScale)
             viewModel.pendingSignatureImage = image
             viewModel.editorMode = .stamp
         case 1:
@@ -186,7 +186,7 @@ struct PDFSignatureSheet: View {
 
     private func selectSavedSignature(_ sig: SavedSignature) {
         if let drawing = try? PKDrawing(data: sig.drawingData) {
-            let image = drawing.image(from: drawing.bounds, scale: UIScreen.main.scale)
+            let image = drawing.image(from: drawing.bounds, scale: UITraitCollection.current.displayScale)
             viewModel.pendingSignatureImage = image
             viewModel.editorMode = .stamp
         }
@@ -194,7 +194,7 @@ struct PDFSignatureSheet: View {
 
     private func signatureImage(from data: Data) -> UIImage? {
         guard let drawing = try? PKDrawing(data: data) else { return nil }
-        return drawing.image(from: drawing.bounds, scale: UIScreen.main.scale)
+        return drawing.image(from: drawing.bounds, scale: UITraitCollection.current.displayScale)
     }
 
     private func saveToUserDefaults() {

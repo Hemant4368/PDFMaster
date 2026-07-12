@@ -62,6 +62,12 @@ struct EditablePDFKitView: UIViewRepresentable {
             uiView.document = document
             uiView.autoScales = true
         }
+        if let currentPage = uiView.currentPage,
+           let currentIdx = uiView.document?.index(for: currentPage),
+           currentIdx != currentPageIndex,
+           let targetPage = uiView.document?.page(at: currentPageIndex) {
+            uiView.go(to: PDFDestination(page: targetPage, at: .zero))
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -76,6 +82,12 @@ struct EditablePDFKitView: UIViewRepresentable {
         init(currentPageIndex: Binding<Int>, reloadToken: UUID) {
             _currentPageIndex = currentPageIndex
             self.reloadToken = reloadToken
+        }
+
+        deinit {
+            if let pdfView {
+                NotificationCenter.default.removeObserver(self, name: .PDFViewPageChanged, object: pdfView)
+            }
         }
 
         @objc func pageChanged(_ notification: Notification) {

@@ -25,11 +25,11 @@ actor ClaudeService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        request.timeoutInterval = 60
+        request.timeoutInterval = 120
 
         let body: [String: Any] = [
             "model": model,
-            "max_tokens": 1024,
+            "max_tokens": 2048,
             "messages": [["role": "user", "content": prompt]]
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -38,6 +38,7 @@ actor ClaudeService {
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         guard http.statusCode == 200 else {
             if http.statusCode == 401 { throw ClaudeServiceError.invalidAPIKey }
+            if http.statusCode == 429 { throw ClaudeServiceError.rateLimited }
             throw ClaudeServiceError.serverError(http.statusCode)
         }
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -51,12 +52,14 @@ actor ClaudeService {
 enum ClaudeServiceError: LocalizedError {
     case missingAPIKey
     case invalidAPIKey
+    case rateLimited
     case serverError(Int)
 
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:      "Enter your Claude API key in the field below."
         case .invalidAPIKey:      "Invalid API key. Check your key and try again."
+        case .rateLimited:        "Rate limited. Please wait a moment and try again."
         case .serverError(let c): "Server error (\(c)). Please try again."
         }
     }

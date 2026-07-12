@@ -1,3 +1,4 @@
+import Combine
 import PDFKit
 import PencilKit
 import SwiftUI
@@ -194,7 +195,11 @@ final class PDFEditorViewModel: ObservableObject {
     @Published var showTextInput = false
     @Published var textInputValue = ""
 
-    @Published var showSidebar = false
+    @Published var showSidebar = false {
+        didSet {
+            if showSidebar { refreshAnnotationCache() }
+        }
+    }
     @Published var showNoteEditor = false
     @Published var noteToEdit: PDFAnnotation?
     @Published var freeTextStyle = FreeTextStyle()
@@ -218,13 +223,28 @@ final class PDFEditorViewModel: ObservableObject {
     var pendingTapPoint: (CGPoint, PDFPage)?
     var pendingStamp: StampDef?
     var pendingSignatureImage: UIImage?
+    var pendingTextSelection: PDFSelection?
 
     let storage = AnnotationStorage()
     let selectionManager = AnnotationSelectionManager()
 
+    private var cachedAnnotations: [(PDFAnnotation, Int)] = []
+    private var cachedEditCount: Int = -1
+    private var cancellables = Set<AnyCancellable>()
+
     var canUndo: Bool { storage.undoManager.canUndo }
     var canRedo: Bool { storage.undoManager.canRedo }
     var editCount: Int { storage.editCount }
+
+    init() {
+        Publishers.Merge(
+            storage.undoManager.$canUndo.map { _ in () },
+            storage.undoManager.$canRedo.map { _ in () }
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] in self?.objectWillChange.send() }
+        .store(in: &cancellables)
+    }
 
     var gestureMode: GestureMode {
         switch editorMode {
@@ -248,6 +268,15 @@ final class PDFEditorViewModel: ObservableObject {
         if selectionManager.selectedAnnotation === annotation {
             selectionManager.deselectAll()
         }
+    }
+
+    func duplicateSelectedAnnotation() {
+        guard let annotation = selectionManager.selectedAnnotation, let page = annotation.page else { return }
+        guard let data = try? NSKeyedArchiver.archivedData(withRootObject: annotation, requiringSecureCoding: false),
+              let copy = try? NSKeyedUnarchiver.unarchivedObject(ofClass: PDFAnnotation.self, from: data) else { return }
+        copy.bounds = annotation.bounds.offsetBy(dx: 20, dy: -20)
+        storage.addAnnotation(copy, to: page)
+        selectionManager.select(copy)
     }
 
     func undo() {
@@ -308,9 +337,34 @@ final class PDFEditorViewModel: ObservableObject {
     func handleTap(at pagePoint: CGPoint, on page: PDFPage) {
         switch editorMode {
         case .text:
-            pendingTapPoint = (pagePoint, page)
-            textInputValue = ""
-            showTextInput = true
+            if let pv = pdfView, let existingSelection = pv.currentSelection,
+               existingSelection.pages.contains(page),
+               let text = existingSelection.string, !text.isEmpty {
+                pendingTapPoint = (pagePoint, page)
+                textInputValue = text
+                pendingTextSelection = existingSelection
+                showTextInput = true
+            } else {
+                let charIndex = page.characterIndex(at: pagePoint)
+                if charIndex != NSNotFound {
+                    if let wordSelection = page.selectionFor(wordAt: pagePoint) {
+                        pendingTapPoint = (pagePoint, page)
+                        textInputValue = wordSelection.string ?? ""
+                        pendingTextSelection = wordSelection
+                        showTextInput = true
+                    } else {
+                        pendingTapPoint = (pagePoint, page)
+                        textInputValue = ""
+                        pendingTextSelection = nil
+                        showTextInput = true
+                    }
+                } else {
+                    pendingTapPoint = (pagePoint, page)
+                    textInputValue = ""
+                    pendingTextSelection = nil
+                    showTextInput = true
+                }
+            }
         case .stamp:
             if let stamp = pendingStamp {
                 placeStamp(stamp, at: pagePoint, on: page)
@@ -377,8 +431,8 @@ final class PDFEditorViewModel: ObservableObject {
             measureAnnotation.color = .clear
             measureAnnotation.alignment = .center
             measureAnnotation.isReadOnly = true
-            addAnnotation(measureAnnotation, to: page)
-            addAnnotation(annotation, to: page)
+            storage.addAnnotations([(measureAnnotation, page), (annotation, page)])
+            storage.editCount += 1
             return
         }
 
@@ -407,10 +461,11 @@ final class PDFEditorViewModel: ObservableObject {
                 measureAnnotation.color = .clear
                 measureAnnotation.alignment = .center
                 measureAnnotation.isReadOnly = true
-                addAnnotation(measureAnnotation, to: page)
+                storage.addAnnotations([(measureAnnotation, page), (annotation, page)])
+                storage.editCount += 1
+            } else {
+                addAnnotation(annotation, to: page)
             }
-
-            addAnnotation(annotation, to: page)
             return
         }
 
@@ -523,12 +578,7 @@ final class PDFEditorViewModel: ObservableObject {
         guard let (point, page) = pendingTapPoint, !textInputValue.isEmpty else { pendingTapPoint = nil; return }
         pendingTapPoint = nil
         let style = freeTextStyle
-        let charWidth = style.fontSize * 0.65
-        let width = max(120, CGFloat(textInputValue.count) * charWidth + 24)
-        let height = style.fontSize * 2.8 * style.lineHeight
-        let rect = CGRect(x: point.x - width / 2, y: point.y - height * 0.3, width: width, height: height)
-        let annotation = PDFAnnotation(bounds: rect, forType: .freeText, withProperties: nil)
-        annotation.contents = textInputValue
+
         let font: UIFont
         if style.isBold && style.isItalic {
             font = UIFont(descriptor: UIFontDescriptor(name: style.fontFamily, size: style.fontSize).withSymbolicTraits([.traitBold, .traitItalic]) ?? UIFontDescriptor(), size: style.fontSize)
@@ -539,6 +589,41 @@ final class PDFEditorViewModel: ObservableObject {
         } else {
             font = UIFont(name: style.fontFamily, size: style.fontSize) ?? .systemFont(ofSize: style.fontSize)
         }
+
+        // Text replacement: overlay original text then place new text
+        if let selection = pendingTextSelection {
+            pendingTextSelection = nil
+            let selectionBounds = selection.bounds(for: page)
+            if selectionBounds.size.width > 0 && selectionBounds.size.height > 0 {
+                let coverRect = selectionBounds.insetBy(dx: -2, dy: -2)
+                let cover = PDFAnnotation(bounds: coverRect, forType: .square, withProperties: nil)
+                cover.color = .white
+                cover.interiorColor = .white
+                let border = PDFBorder()
+                border.lineWidth = 0
+                cover.border = border
+                cover.isReadOnly = true
+                let textAnnotation = PDFAnnotation(bounds: selectionBounds, forType: .freeText, withProperties: nil)
+                textAnnotation.contents = textInputValue
+                textAnnotation.font = font
+                textAnnotation.fontColor = UIColor(style.textColor)
+                textAnnotation.color = style.backgroundColor == .clear ? .clear : UIColor(style.backgroundColor)
+                textAnnotation.alignment = style.alignment
+                let textBorder = PDFBorder()
+                textBorder.lineWidth = 0
+                textAnnotation.border = textBorder
+                storage.addAnnotations([(cover, page), (textAnnotation, page)])
+                storage.editCount += 1
+            }
+            return
+        }
+
+        let charWidth = style.fontSize * 0.65
+        let width = max(120, CGFloat(textInputValue.count) * charWidth + 24)
+        let height = style.fontSize * 2.8 * style.lineHeight
+        let rect = CGRect(x: point.x - width / 2, y: point.y - height * 0.3, width: width, height: height)
+        let annotation = PDFAnnotation(bounds: rect, forType: .freeText, withProperties: nil)
+        annotation.contents = textInputValue
         annotation.font = font
         annotation.fontColor = UIColor(style.textColor)
         annotation.color = style.backgroundColor == .clear ? .clear : UIColor(style.backgroundColor)
@@ -665,8 +750,8 @@ final class PDFEditorViewModel: ObservableObject {
             annotation.url = URL(string: "mailto:\(target.urlString)")
         case .page:
             annotation.contents = "Page \(target.pageIndex + 1)"
-            if let document = pdfView?.document, target.pageIndex < document.pageCount {
-                annotation.destination = PDFDestination(page: document.page(at: target.pageIndex)!, at: .zero)
+            if let document = pdfView?.document, target.pageIndex < document.pageCount, let targetPage = document.page(at: target.pageIndex) {
+                annotation.destination = PDFDestination(page: targetPage, at: .zero)
             }
         }
         annotation.color = UIColor(annotationColor).withAlphaComponent(0.3)
@@ -738,8 +823,19 @@ final class PDFEditorViewModel: ObservableObject {
         }
     }
 
+    private func refreshAnnotationCache() {
+        guard let document = pdfView?.document else { return }
+        let currentEditCount = storage.editCount
+        if currentEditCount != cachedEditCount {
+            cachedAnnotations = storage.allAnnotations(in: document)
+            cachedEditCount = currentEditCount
+        }
+    }
+
     func allAnnotations() -> [(PDFAnnotation, Int)] {
-        guard let document = pdfView?.document else { return [] }
-        return storage.allAnnotations(in: document)
+        if cachedAnnotations.isEmpty || storage.editCount != cachedEditCount {
+            refreshAnnotationCache()
+        }
+        return cachedAnnotations
     }
 }

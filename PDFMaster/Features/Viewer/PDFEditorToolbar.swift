@@ -166,31 +166,13 @@ struct PDFEditorToolbar: View {
         VStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
-                    ForEach(AnnotationSubtool.allCases) { tool in
-                        let isActive = viewModel.annotationSubtool == tool
-                        Button {
-                            viewModel.annotationSubtool = tool
-                        } label: {
-                            VStack(spacing: 2) {
-                                Image(systemName: tool.icon)
-                                    .font(.system(size: 15, weight: isActive ? .bold : .regular))
-                                Text(tool.rawValue)
-                                    .font(.system(size: 8, weight: isActive ? .semibold : .regular))
-                            }
-                            .foregroundStyle(isActive ? AppTheme.primary : .secondary)
-                            .frame(minWidth: 42)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 6)
-                            .background {
-                                if isActive {
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(AppTheme.primary.opacity(0.12))
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-
+                    annotateGroup("Markup", tools: [.highlight, .underline, .strikeOut, .squiggly])
+                    Divider().frame(height: 24)
+                    annotateGroup("Shapes", tools: [.rectangle, .roundedRect, .circle, .triangle, .diamond, .cloud, .callout])
+                    Divider().frame(height: 24)
+                    annotateGroup("Lines", tools: [.line, .arrow, .polygon, .polyline, .measurement])
+                    Divider().frame(height: 24)
+                    annotateGroup("Other", tools: [.note])
                     inspectorButton
                 }
                 .padding(.horizontal, 8)
@@ -205,6 +187,41 @@ struct PDFEditorToolbar: View {
                 measurementBar
             }
         }
+    }
+
+    private func annotateGroup(_ name: String, tools: [AnnotationSubtool]) -> some View {
+        HStack(spacing: 2) {
+            Text(name)
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .padding(.trailing, 2)
+            ForEach(tools) { tool in
+                let isActive = viewModel.annotationSubtool == tool
+                Button {
+                    viewModel.annotationSubtool = tool
+                } label: {
+                    VStack(spacing: 2) {
+                        Image(systemName: tool.icon)
+                            .font(.system(size: 15, weight: isActive ? .bold : .regular))
+                        Text(tool.rawValue)
+                            .font(.system(size: 8, weight: isActive ? .semibold : .regular))
+                    }
+                    .foregroundStyle(isActive ? AppTheme.primary : .secondary)
+                    .frame(minWidth: 42)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 6)
+                    .background {
+                        if isActive {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(AppTheme.primary.opacity(0.12))
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
     }
 
     private var inspectorButton: some View {

@@ -207,3 +207,24 @@ extension PDFAnnotationKey {
     static let UUID = PDFAnnotationKey(rawValue: "UUID")
     static let imageData = PDFAnnotationKey(rawValue: "ImageData")
 }
+
+extension PDFPage {
+    func selectionFor(wordAt point: CGPoint) -> PDFSelection? {
+        let charIndex = characterIndex(at: point)
+        guard charIndex != NSNotFound else { return nil }
+        guard let text = string else { return nil }
+        let nsText = text as NSString
+        var start = charIndex
+        var end = charIndex + 1
+        while start > 0 {
+            let c = nsText.character(at: start - 1)
+            if c > 0x20 && c != 0xA && c != 0xD { start -= 1 } else { break }
+        }
+        while end < nsText.length {
+            let c = nsText.character(at: end)
+            if c > 0x20 && c != 0xA && c != 0xD { end += 1 } else { break }
+        }
+        guard end > start else { return nil }
+        return document?.selection(from: self, atCharacterIndex: start, to: self, atCharacterIndex: end)
+    }
+}

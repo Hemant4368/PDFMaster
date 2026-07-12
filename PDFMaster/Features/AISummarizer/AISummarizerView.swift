@@ -10,6 +10,7 @@ struct AISummarizerView: View {
     @State private var showAPIKey = false
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var charCount = 0
 
     var body: some View {
         Form {
@@ -18,6 +19,11 @@ struct AISummarizerView: View {
                 if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 PrimaryButton(title: "Summarize", systemImage: "sparkles.rectangle.stack") { summarize() }
                     .disabled(sourceURL == nil || apiKey.isEmpty)
+                if charCount > 0 {
+                    Text("\(charCount) characters extracted")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {
@@ -78,9 +84,11 @@ struct AISummarizerView: View {
                    let raw = pdf.string,
                    !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     text = String(raw.prefix(8000))
+                    charCount = text.count
                 } else {
                     let ocr = try await OCRService.shared.recognizeText(inPDF: sourceURL, languages: ["en-US"])
                     text = String(ocr.prefix(8000))
+                    charCount = text.count
                 }
                 guard !text.isEmpty else {
                     errorMessage = "No readable text found in this PDF."

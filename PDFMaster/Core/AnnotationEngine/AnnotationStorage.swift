@@ -27,6 +27,43 @@ final class AnnotationStorage: ObservableObject {
         editCount += 1
     }
 
+    func addAnnotations(_ annotations: [(PDFAnnotation, PDFPage)]) {
+        var actions: [AnnotationUndoAction] = []
+        for (annotation, page) in annotations {
+            page.addAnnotation(annotation)
+            actions.append(AnnotationUndoAction(
+                kind: .add, annotation: annotation, page: page,
+                previousProperties: nil, timestamp: Date()
+            ))
+        }
+        undoManager.recordBatch(actions)
+        annotationCount += annotations.count
+        editCount += 1
+    }
+
+    func removeAnnotations(_ annotations: [(PDFAnnotation, PDFPage)]) {
+        var actions: [AnnotationUndoAction] = []
+        for (annotation, page) in annotations {
+            let props = capturePropertiesForBatch(annotation)
+            actions.append(AnnotationUndoAction(
+                kind: .remove, annotation: annotation, page: page,
+                previousProperties: props, timestamp: Date()
+            ))
+            page.removeAnnotation(annotation)
+        }
+        undoManager.recordBatch(actions)
+        annotationCount = max(0, annotationCount - annotations.count)
+        editCount += 1
+    }
+
+    private func capturePropertiesForBatch(_ annotation: PDFAnnotation) -> [String: Any] {
+        var props: [String: Any] = [:]
+        props["bounds"] = NSCoder.string(for: annotation.bounds)
+        props["color"] = annotation.color
+        props["contents"] = annotation.contents
+        return props
+    }
+
     func allAnnotations(in document: PDFDocument) -> [(PDFAnnotation, Int)] {
         var result: [(PDFAnnotation, Int)] = []
         for i in 0..<document.pageCount {

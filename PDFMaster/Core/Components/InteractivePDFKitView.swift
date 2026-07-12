@@ -126,20 +126,53 @@ struct InteractivePDFKitView: UIViewRepresentable {
 
     func updateUIView(_ container: UIView, context: Context) {
         guard let pdfView = context.coordinator.pdfView else { return }
-        if context.coordinator.reloadToken != reloadToken || pdfView.document !== document {
-            context.coordinator.reloadToken = reloadToken
+        let c = context.coordinator
+
+        if c.reloadToken != reloadToken || pdfView.document !== document {
+            c.reloadToken = reloadToken
+            let savedScale = pdfView.scaleFactor
+            let savedPage = pdfView.currentPage
+            let savedBounds = savedPage?.bounds(for: .cropBox)
+
             pdfView.document = document
-            pdfView.autoScales = true
+
+            if let savedPage, let savedBounds, savedPage !== pdfView.currentPage {
+                for i in 0..<document.pageCount {
+                    if let page = document.page(at: i), page.bounds(for: .cropBox) == savedBounds {
+                        pdfView.go(to: PDFDestination(page: page, at: .zero))
+                        break
+                    }
+                }
+            }
+            if savedScale > 0 && savedScale < 10 {
+                pdfView.scaleFactor = savedScale
+            } else {
+                pdfView.autoScales = true
+            }
         }
+
+        if let currentPage = pdfView.currentPage,
+           let currentIdx = pdfView.document?.index(for: currentPage),
+           currentIdx != currentPageIndex {
+            if let targetPage = document.page(at: currentPageIndex) {
+                pdfView.go(to: PDFDestination(page: targetPage, at: .zero))
+            }
+        }
+
         let newDisplayMode: PDFDisplayMode = isEditing ? .singlePage : .singlePageContinuous
         if pdfView.displayMode != newDisplayMode {
+            let savedPage = pdfView.currentPage
             pdfView.displayMode = newDisplayMode
+            if let savedPage, pdfView.currentPage !== savedPage {
+                pdfView.go(to: PDFDestination(page: savedPage, at: .zero))
+            }
         }
-        context.coordinator.editorViewModel = editorViewModel
-        context.coordinator.updateMode(editorViewModel.gestureMode, pdfView: pdfView)
-        context.coordinator.updateSelectionHighlight()
+
+        c.editorViewModel = editorViewModel
+        c.updateMode(editorViewModel.gestureMode, pdfView: pdfView)
+        c.updateSelectionHighlight()
         if editorViewModel.gestureMode == .pencil {
-            context.coordinator.configureCanvasTool()
+            c.configureCanvasTool()
         }
     }
 
@@ -169,6 +202,12 @@ struct InteractivePDFKitView: UIViewRepresentable {
         init(currentPageIndex: Binding<Int>, reloadToken: UUID) {
             _currentPageIndex = currentPageIndex
             self.reloadToken = reloadToken
+        }
+
+        deinit {
+            if let pdfView {
+                NotificationCenter.default.removeObserver(self, name: .PDFViewPageChanged, object: pdfView)
+            }
         }
 
         @MainActor func updateMode(_ mode: GestureMode, pdfView: PDFView) {
@@ -401,8 +440,7 @@ struct InteractivePDFKitView: UIViewRepresentable {
                     weakVM.showInspector = true
                 })
                 menu.addAction(UIAlertAction(title: "Duplicate", style: .default) { _ in
-                    weakVM.selectionManager.duplicateSelected()
-                    weakVM.storage.editCount += 1
+                    weakVM.duplicateSelectedAnnotation()
                 })
                 menu.addAction(UIAlertAction(title: tappedAnnotation.isReadOnly ? "Unlock" : "Lock", style: .default) { _ in
                     weakVM.toggleAnnotationLock(tappedAnnotation)

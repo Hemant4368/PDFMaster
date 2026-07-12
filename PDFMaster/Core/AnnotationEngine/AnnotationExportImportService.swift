@@ -55,9 +55,10 @@ final class AnnotationExportImportService {
                 let pageRect = page.bounds(for: .mediaBox)
                 let rectStr = "\(rect.origin.x),\(pageRect.height - rect.origin.y - rect.height),\(rect.width),\(rect.height)"
                 let color = annotation.color
-                let r = (color.cgColor.components?[0] ?? 0) * 255
-                let g = (color.cgColor.components?[1] ?? 0) * 255
-                let b = (color.cgColor.components?[2] ?? 0) * 255
+                let comps = color.cgColor.components ?? [0, 0, 0]
+                let r = (comps.count > 0 ? comps[0] : 0) * 255
+                let g = (comps.count > 1 ? comps[1] : 0) * 255
+                let b = (comps.count > 2 ? comps[2] : 0) * 255
                 let hex = String(format: "%02X%02X%02X", Int(r), Int(g), Int(b))
                 xfdf += """
                 <annots type="\(annotation.type ?? "")" page="\(i)" rect="\(rectStr)" color="#\(hex)" />

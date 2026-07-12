@@ -12,6 +12,7 @@ struct TranslatePDFView: View {
     @State private var showAPIKey = false
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var charCount = 0
 
     private let languages = ["French", "Spanish", "German", "Italian", "Portuguese",
                              "Chinese", "Japanese", "Korean", "Arabic", "Hindi", "Russian"]
@@ -29,6 +30,11 @@ struct TranslatePDFView: View {
                 }
                 PrimaryButton(title: "Translate", systemImage: "character.book.closed") { translate() }
                     .disabled(sourceURL == nil || apiKey.isEmpty)
+                if charCount > 0 {
+                    Text("\(charCount) characters extracted")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {
@@ -88,10 +94,12 @@ struct TranslatePDFView: View {
                        let raw = pdf.string,
                        !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         extractedText = String(raw.prefix(6000))
+                        charCount = extractedText.count
                     } else {
                         extractedText = String(
                             (try await OCRService.shared.recognizeText(inPDF: sourceURL, languages: ["en-US"])).prefix(6000)
                         )
+                        charCount = extractedText.count
                     }
                 }
                 guard !extractedText.isEmpty else {
