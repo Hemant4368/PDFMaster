@@ -13,6 +13,7 @@ struct PDFEditorToolbar: View {
     let onApplyRedactions: () -> Void
     let onCalibrate: () -> Void
     let onCompletePolygon: () -> Void
+    let onDoneEditing: () -> Void
 
     @State private var modeExpanded = false
 
@@ -55,7 +56,30 @@ struct PDFEditorToolbar: View {
     private var modePill: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
-                ForEach(EditorMode.allCases) { mode in
+                if viewModel.editorMode != .view {
+                    Button {
+                        activateMode(.view)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("Done")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .frame(height: 34)
+                        .background(
+                            Capsule()
+                                .fill(Color.green)
+                                .shadow(color: .green.opacity(0.3), radius: 4, y: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 4)
+                }
+
+                ForEach(EditorMode.allCases.filter { $0 != .view }) { mode in
                     let isActive = viewModel.editorMode == mode
                     Button {
                         activateMode(mode)
@@ -85,6 +109,10 @@ struct PDFEditorToolbar: View {
     private func activateMode(_ mode: EditorMode) {
         let haptic = UIImpactFeedbackGenerator(style: .soft)
         haptic.impactOccurred()
+        if mode == .view {
+            onDoneEditing()
+            return
+        }
         viewModel.editorMode = mode
         if mode == .signature { viewModel.showSignatureSheet = true }
         if mode == .search { viewModel.showSearchPanel = true }

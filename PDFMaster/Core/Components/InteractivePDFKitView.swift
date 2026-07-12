@@ -7,6 +7,7 @@ struct InteractivePDFKitView: UIViewRepresentable {
     @Binding var currentPageIndex: Int
     let reloadToken: UUID
     let editorViewModel: PDFEditorViewModel
+    let isEditing: Bool
 
     func makeUIView(context: Context) -> UIView {
         let container = UIView()
@@ -129,6 +130,10 @@ struct InteractivePDFKitView: UIViewRepresentable {
             context.coordinator.reloadToken = reloadToken
             pdfView.document = document
             pdfView.autoScales = true
+        }
+        let newDisplayMode: PDFDisplayMode = isEditing ? .singlePage : .singlePageContinuous
+        if pdfView.displayMode != newDisplayMode {
+            pdfView.displayMode = newDisplayMode
         }
         context.coordinator.editorViewModel = editorViewModel
         context.coordinator.updateMode(editorViewModel.gestureMode, pdfView: pdfView)

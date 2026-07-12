@@ -29,16 +29,17 @@ struct PDFViewerView: View {
     @State private var showCalibration = false
     @State private var calibrateKnownLength: String = ""
     @State private var showBackWarning = false
+    @State private var lastEditMode: EditorMode = .annotate
     @StateObject private var editorVM = PDFEditorViewModel()
 
-    private var isAnnotating: Bool { editorVM.editorMode != .view }
+    private var isEditing: Bool { editorVM.editorMode != .view }
 
     var body: some View {
         Group {
             if let pdfDocument {
                 ZStack {
                     pdfContainer(pdfDocument)
-                        .ignoresSafeArea(.all, edges: isAnnotating ? .bottom : [])
+                        .ignoresSafeArea(.all, edges: isEditing ? .bottom : [])
 
                     VStack(spacing: 0) {
                         unsavedBanner
@@ -46,23 +47,34 @@ struct PDFViewerView: View {
                         Spacer()
                     }
 
-                    VStack(spacing: 0) {
-                        Spacer()
-                        PDFEditorToolbar(
-                            viewModel: editorVM,
-                            documentPageCount: pdfDocument.pageCount,
-                            currentPageIndex: currentPageIndex,
-                            onSave: saveEditedPDF,
-                            onPrint: { if let url { PrintController.printPDF(url: url) } },
-                            onAddPage: addPage,
-                            onDeletePage: { showDeletePageConfirmation = true },
-                            onReorder: prepareReorder,
-                            onMarkupApply: { editorVM.applyMarkupFromSelection(); markEdited() },
-                            onApplyRedactions: { editorVM.applyRedactions(to: pdfDocument); markEdited() },
-                            onCalibrate: { showCalibration = true },
-                            onCompletePolygon: { completePolygon() }
-                        )
-                        .ignoresSafeArea(.keyboard)
+                    if isEditing {
+                        VStack(spacing: 0) {
+                            Spacer()
+                            PDFEditorToolbar(
+                                viewModel: editorVM,
+                                documentPageCount: pdfDocument.pageCount,
+                                currentPageIndex: currentPageIndex,
+                                onSave: saveEditedPDF,
+                                onPrint: { if let url { PrintController.printPDF(url: url) } },
+                                onAddPage: addPage,
+                                onDeletePage: { showDeletePageConfirmation = true },
+                                onReorder: prepareReorder,
+                                onMarkupApply: { editorVM.applyMarkupFromSelection(); markEdited() },
+                                onApplyRedactions: { editorVM.applyRedactions(to: pdfDocument); markEdited() },
+                                onCalibrate: { showCalibration = true },
+                                onCompletePolygon: { completePolygon() },
+                                onDoneEditing: { exitEditMode() }
+                            )
+                            .ignoresSafeArea(.keyboard)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    } else {
+                        VStack(spacing: 0) {
+                            Spacer()
+                            editFloatingButton
+                                .padding(.bottom, 20)
+                                .transition(.scale.combined(with: .opacity))
+                        }
                     }
 
                     if isSaving {
@@ -70,7 +82,7 @@ struct PDFViewerView: View {
                             .transition(.opacity.animation(.easeInOut(duration: 0.2)))
                     }
                 }
-                .animation(.spring(response: 0.3, dampingFraction: 0.85), value: isAnnotating)
+                .animation(.spring(response: 0.3, dampingFraction: 0.85), value: isEditing)
             } else if let loadError {
                 ContentUnavailableView(
                     "Failed to Load PDF",
@@ -85,7 +97,7 @@ struct PDFViewerView: View {
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        .toolbarBackground(isAnnotating ? .hidden : .automatic)
+        .toolbarBackground(isEditing ? .hidden : .automatic)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 HStack(spacing: 4) {
@@ -206,6 +218,7 @@ struct PDFViewerView: View {
         .onReceive(editorVM.storage.$editCount.dropFirst()) { _ in
             markEdited()
         }
+        .preferredColorScheme(.light)
     }
 
     // MARK: - PDF Container
@@ -220,10 +233,38 @@ struct PDFViewerView: View {
                 document: pdf,
                 currentPageIndex: $currentPageIndex,
                 reloadToken: reloadToken,
-                editorViewModel: editorVM
+                editorViewModel: editorVM,
+                isEditing: isEditing
             )
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: showThumbnails)
+    }
+
+    // MARK: - Edit Button
+
+    private var editFloatingButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                editorVM.editorMode = lastEditMode
+                if lastEditMode == .signature { editorVM.showSignatureSheet = true }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "pencil.tip")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Edit")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
+            .background(
+                Capsule()
+                    .fill(AppTheme.primary)
+                    .shadow(color: AppTheme.primary.opacity(0.35), radius: 12, y: 4)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Unsaved Banner
@@ -395,6 +436,15 @@ struct PDFViewerView: View {
         guard let pdfDocument, let page = pdfDocument.page(at: currentPageIndex) else { return }
         editorVM.completePolygon(on: page)
         markEdited()
+    }
+
+    private func exitEditMode() {
+        lastEditMode = editorVM.editorMode
+        if hasUnsavedChanges { saveEditedPDF() }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            editorVM.editorMode = .view
+            editorVM.selectionManager.deselectAll()
+        }
     }
 
     private func loadDocument() async {
