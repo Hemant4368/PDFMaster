@@ -16,7 +16,7 @@ struct SplashView: View {
                         .foregroundStyle(.white)
                         .scaleEffect(pulse ? 1.06 : 0.92)
                 }
-                Text("PDF Master AI")
+                Text("PDF Converter")
                     .font(.system(size: 34, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
                 Text("Scanner, Editor & Converter")

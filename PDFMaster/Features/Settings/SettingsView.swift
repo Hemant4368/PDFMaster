@@ -11,7 +11,7 @@ struct SettingsView: View {
             Form {
                 Section("Premium") {
                     Button { showSubscription = true } label: {
-                        Label("PDF Master AI Premium", systemImage: "crown.fill")
+                        Label("PDF Converter Premium", systemImage: "crown.fill")
                             .foregroundStyle(AppTheme.primary)
                     }
                 }

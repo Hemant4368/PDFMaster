@@ -11,6 +11,8 @@ struct RtfToPDFView: View {
     @State private var savedDocument: DocumentRecord?
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @AppStorage("rtfToPDF.pageSize") private var pageSize: PDFPageSize = .a4
+    @AppStorage("rtfToPDF.orientation") private var orientation: PDFPageOrientation = .portrait
 
     var body: some View {
         Form {
@@ -21,13 +23,21 @@ struct RtfToPDFView: View {
                 if let url = sourceURL { SelectedPDFPreview(url: url) }
             }
 
-            Section("Options") {
+            Section("Output Options") {
                 TextField("Output name", text: $title)
+                Picker("Page Size", selection: $pageSize) {
+                    ForEach(PDFPageSize.allCases) { s in Text(s.rawValue).tag(s) }
+                }
+                Picker("Orientation", selection: $orientation) {
+                    ForEach(PDFPageOrientation.allCases) { o in Text(o.rawValue).tag(o) }
+                }
             }
 
             Section {
                 PrimaryButton(title: "Convert to PDF", systemImage: "doc.richtext") { convert() }
                     .disabled(sourceURL == nil || title.isEmpty)
+            } footer: {
+                Text("In Preview \u{2192} Print, set page size to \(pageSize.rawValue) and orientation to \(orientation.rawValue).")
             }
         }
         .navigationTitle("RTF to PDF")
@@ -51,7 +61,7 @@ struct RtfToPDFView: View {
             isWorking = true
             defer { isWorking = false }
             do {
-                let data = try RtfPDFRenderer.render(url: url)
+                let data = try RtfPDFRenderer.render(url: url, pageSize: pageSize, orientation: orientation)
                 savedDocument = try await SaveDocumentHelper.savePDF(data: data, title: title, modelContext: modelContext)
             } catch { errorMessage = error.localizedDescription }
         }
@@ -61,7 +71,7 @@ struct RtfToPDFView: View {
 // MARK: – Renderer
 
 enum RtfPDFRenderer {
-    static func render(url: URL) throws -> Data {
+    static func render(url: URL, pageSize: PDFPageSize = .a4, orientation: PDFPageOrientation = .portrait) throws -> Data {
         let accessing = url.startAccessingSecurityScopedResource()
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
 
@@ -75,15 +85,14 @@ enum RtfPDFRenderer {
             documentAttributes: nil
         ) else { throw PDFProcessingError.unreadableDocument }
 
-        let pageWidth: CGFloat  = 595.28
-        let pageHeight: CGFloat = 841.89
-        let margin: CGFloat     = 48
+        let paperRect = pageSize.rect(orientation: orientation)
+        let margin: CGFloat = 48
         let textRect = CGRect(x: margin, y: margin,
-                              width: pageWidth - margin * 2,
-                              height: pageHeight - margin * 2)
+                              width: paperRect.width - margin * 2,
+                              height: paperRect.height - margin * 2)
 
         let pdfData = NSMutableData()
-        UIGraphicsBeginPDFContextToData(pdfData, CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight), nil)
+        UIGraphicsBeginPDFContextToData(pdfData, paperRect, nil)
 
         let framesetter = CTFramesetterCreateWithAttributedString(attributed)
         var charIndex: CFIndex = 0
@@ -93,7 +102,7 @@ enum RtfPDFRenderer {
             UIGraphicsBeginPDFPage()
             guard let ctx = UIGraphicsGetCurrentContext() else { break }
             ctx.textMatrix = .identity
-            ctx.translateBy(x: 0, y: pageHeight)
+            ctx.translateBy(x: 0, y: paperRect.height)
             ctx.scaleBy(x: 1, y: -1)
 
             let path = CGMutablePath()

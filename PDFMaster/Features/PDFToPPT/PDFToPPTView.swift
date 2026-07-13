@@ -7,7 +7,8 @@ struct PDFToPPTView: View {
     @State private var showShare = false
     @State private var isWorking = false
     @State private var errorMessage: String?
-    @State private var options = PDFToPPTOptions()
+    @AppStorage("pdfToPPT.quality") private var quality: PDFQuality = .balanced
+    @AppStorage("pdfToPPT.aspectRatio") private var aspectRatio = "16:9"
 
     var body: some View {
         Form {
@@ -19,26 +20,22 @@ struct PDFToPPTView: View {
             } header: {
                 Text("Input")
             } footer: {
-                Text("Each PDF page is exported as an image. Open slides in PowerPoint or Keynote and insert the images.")
+                Text("Each PDF page is exported as a JPG image. Open slides in PowerPoint or Keynote and insert the images.")
             }
 
             if sourceURL != nil {
-                Section("Options") {
-                    Picker("Image Format", selection: $options.imageFormat) {
-                        ForEach(PDFExportFormat.allCases) { fmt in
-                            Text(fmt.rawValue).tag(fmt)
-                        }
+                Section {
+                    Picker("Image Quality", selection: $quality) {
+                        ForEach(PDFQuality.allCases) { q in Text(q.rawValue).tag(q) }
                     }
-                    Picker("Quality", selection: $options.quality) {
-                        ForEach(PDFQuality.allCases) { q in
-                            Text(q.rawValue).tag(q)
-                        }
+                    Picker("Slide Aspect Ratio", selection: $aspectRatio) {
+                        Text("4:3").tag("4:3")
+                        Text("16:9").tag("16:9")
                     }
-                    Picker("Page Range", selection: $options.pageRange) {
-                        ForEach(PageRange.allCases) { r in
-                            Text(r.rawValue).tag(r)
-                        }
-                    }
+                } header: {
+                    Text("Slide Options")
+                } footer: {
+                    Text("Set matching slide size in PowerPoint (Design \u{2192} Slide Size) or Keynote.")
                 }
             }
 
@@ -72,12 +69,11 @@ struct PDFToPPTView: View {
             isWorking = true
             defer { isWorking = false }
             do {
-                let imageDataList = try await PDFProcessingService.shared.renderImages(from: sourceURL, format: options.imageFormat)
+                let imageDataList = try await PDFProcessingService.shared.renderImages(from: sourceURL, format: .jpg, scale: quality.renderScale)
                 let base = sourceURL.deletingPathExtension().lastPathComponent
-                let ext = options.imageFormat == .jpg ? "jpg" : "png"
                 slideURLs = try imageDataList.enumerated().map { index, data in
                     let url = FileManager.default.temporaryDirectory
-                        .appendingPathComponent("\(base)-slide-\(index + 1).\(ext)")
+                        .appendingPathComponent("\(base)-slide-\(index + 1).jpg")
                     try data.write(to: url, options: .atomic)
                     return url
                 }

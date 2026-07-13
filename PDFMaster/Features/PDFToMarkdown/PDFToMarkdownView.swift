@@ -10,6 +10,8 @@ struct PDFToMarkdownView: View {
     @State private var showShare = false
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @AppStorage("pdfToMarkdown.detectHeadings") private var detectHeadings = true
+    @AppStorage("pdfToMarkdown.detectTables") private var detectTables = true
 
     var body: some View {
         Form {
@@ -18,6 +20,13 @@ struct PDFToMarkdownView: View {
                 if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 PrimaryButton(title: "Convert to Markdown", systemImage: "chevron.left.forwardslash.chevron.right") { convert() }
                     .disabled(sourceURL == nil)
+            }
+
+            if sourceURL != nil {
+                Section("Output Options") {
+                    Toggle("Detect and format headings", isOn: $detectHeadings)
+                    Toggle("Detect and format tables", isOn: $detectTables)
+                }
             }
 
             if !markdownText.isEmpty {
@@ -72,7 +81,7 @@ struct PDFToMarkdownView: View {
                 } else {
                     rawText = try await OCRService.shared.recognizeText(inPDF: sourceURL, languages: ["en-US"])
                 }
-                markdownText = MarkdownConverter.convert(rawText)
+                markdownText = MarkdownConverter.convert(rawText, detectHeadings: detectHeadings, detectTables: detectTables)
                 if markdownText.isEmpty { errorMessage = "No text found in this PDF." }
             } catch { errorMessage = error.localizedDescription }
         }
@@ -88,19 +97,51 @@ struct PDFToMarkdownView: View {
 }
 
 private enum MarkdownConverter {
-    static func convert(_ text: String) -> String {
-        let lines = text.components(separatedBy: .newlines)
-        return lines.map { line in
+    static func convert(_ text: String, detectHeadings: Bool = true, detectTables: Bool = true) -> String {
+        let rawLines = text.components(separatedBy: .newlines)
+        var result: [String] = []
+        var i = 0
+        while i < rawLines.count {
+            let line = rawLines[i]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { return "" }
-            if trimmed.count < 70 && trimmed == trimmed.uppercased() && trimmed.rangeOfCharacter(from: .letters) != nil {
-                return "## \(trimmed.capitalized)"
+            guard !trimmed.isEmpty else { result.append(""); i += 1; continue }
+
+            if detectHeadings && trimmed.count < 70 && trimmed == trimmed.uppercased() && trimmed.rangeOfCharacter(from: .letters) != nil {
+                result.append("## \(trimmed.capitalized)")
+                i += 1
+                continue
             }
-            if trimmed.hasPrefix("•") || trimmed.hasPrefix("·") {
-                return "- \(trimmed.dropFirst().trimmingCharacters(in: .whitespaces))"
+
+            if trimmed.hasPrefix("\u{2022}") || trimmed.hasPrefix("\u{00B7}") {
+                result.append("- \(trimmed.dropFirst().trimmingCharacters(in: .whitespaces))")
+                i += 1
+                continue
             }
-            return line
+
+            if detectTables {
+                let parts = trimmed.components(separatedBy: "  ").filter { !$0.isEmpty }
+                if parts.count > 1 {
+                    let headerRow = parts.map { "| \($0.trimmingCharacters(in: .whitespaces)) " }.joined() + "|"
+                    let separatorRow = parts.map { _ in "| --- " }.joined() + "|"
+                    result.append(headerRow)
+                    result.append(separatorRow)
+                    i += 1
+                    while i < rawLines.count {
+                        let next = rawLines[i].trimmingCharacters(in: .whitespaces)
+                        if next.isEmpty || next == trimmed { break }
+                        let rowParts = next.components(separatedBy: "  ").filter { !$0.isEmpty }
+                        if rowParts.count < 2 { result.append(next); i += 1; break }
+                        let row = rowParts.map { "| \($0.trimmingCharacters(in: .whitespaces)) " }.joined() + "|"
+                        result.append(row)
+                        i += 1
+                    }
+                    continue
+                }
+            }
+
+            result.append(line)
+            i += 1
         }
-        .joined(separator: "\n")
+        return result.joined(separator: "\n")
     }
 }

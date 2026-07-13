@@ -16,7 +16,7 @@ struct SubscriptionView: View {
                         .frame(width: 106, height: 106)
                         .background(AppTheme.redGradient)
                         .clipShape(Circle())
-                    Text("PDF Master AI Premium")
+                    Text("PDF Converter Premium")
                         .font(.system(.title, design: .rounded, weight: .heavy))
                     Text("Unlimited scans, OCR export, unlimited merge, watermark tools, and AI-ready document workflows.")
                         .multilineTextAlignment(.center)

@@ -16,8 +16,8 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "4A1000010000000000000015"
-               BuildableName = "PDF Master AI.app"
-               BlueprintName = "PDF Master AI"
+               BuildableName = "PDF Converter.app"
+               BlueprintName = "PDF Converter"
                ReferencedContainer = "container:PDFMaster.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -45,8 +45,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "4A1000010000000000000015"
-            BuildableName = "PDF Master AI.app"
-            BlueprintName = "PDF Master AI"
+            BuildableName = "PDF Converter.app"
+            BlueprintName = "PDF Converter"
             ReferencedContainer = "container:PDFMaster.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -62,8 +62,8 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "4A1000010000000000000015"
-            BuildableName = "PDF Master AI.app"
-            BlueprintName = "PDF Master AI"
+            BuildableName = "PDF Converter.app"
+            BlueprintName = "PDF Converter"
             ReferencedContainer = "container:PDFMaster.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

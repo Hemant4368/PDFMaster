@@ -8,10 +8,13 @@ struct TxtToPDFView: View {
     @State private var sourceURL: URL?
     @State private var showPicker = false
     @State private var title = "Text PDF"
-    @State private var fontSize: CGFloat = 12
     @State private var savedDocument: DocumentRecord?
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @AppStorage("txtToPDF.fontFamily") private var fontFamily: TxtFontFamily = .systemDefault
+    @AppStorage("txtToPDF.pageSize") private var pageSize: PDFPageSize = .a4
+    @AppStorage("txtToPDF.margin") private var margin: PDFMarginSize = .small
+    @AppStorage("txtToPDF.fontSize") private var fontSize: Double = 12
 
     var body: some View {
         Form {
@@ -22,9 +25,21 @@ struct TxtToPDFView: View {
                 if let url = sourceURL { SelectedPDFPreview(url: url) }
             }
 
-            Section("Options") {
+            Section("Text Settings") {
                 TextField("Output name", text: $title)
+                Picker("Font", selection: $fontFamily) {
+                    ForEach(TxtFontFamily.allCases) { f in Text(f.rawValue).tag(f) }
+                }
                 Stepper("Font size: \(Int(fontSize))pt", value: $fontSize, in: 8...24, step: 1)
+            }
+
+            Section("Page Settings") {
+                Picker("Page Size", selection: $pageSize) {
+                    ForEach(PDFPageSize.allCases) { s in Text(s.rawValue).tag(s) }
+                }
+                Picker("Margin", selection: $margin) {
+                    ForEach(PDFMarginSize.allCases) { m in Text(m.rawValue).tag(m) }
+                }
             }
 
             Section {
@@ -54,7 +69,7 @@ struct TxtToPDFView: View {
             defer { isWorking = false }
             do {
                 let text = try String(contentsOf: url, encoding: .utf8)
-                let data = try TextPDFRenderer.render(text: text, fontSize: fontSize)
+                let data = try TextPDFRenderer.render(text: text, fontFamily: fontFamily, fontSize: CGFloat(fontSize), margin: margin)
                 savedDocument = try await SaveDocumentHelper.savePDF(data: data, title: title, modelContext: modelContext)
             } catch { errorMessage = error.localizedDescription }
         }
@@ -64,24 +79,33 @@ struct TxtToPDFView: View {
 // MARK: – Renderer
 
 enum TextPDFRenderer {
-    static func render(text: String, fontSize: CGFloat = 12, isRTF: Bool = false) throws -> Data {
+    static func render(text: String, fontFamily: TxtFontFamily = .systemDefault, fontSize: CGFloat = 12, margin: PDFMarginSize = .small, isRTF: Bool = false) throws -> Data {
         let pageWidth: CGFloat  = 595.28
         let pageHeight: CGFloat = 841.89
-        let margin: CGFloat     = 48
+        let marginPts: CGFloat  = margin.points + 48
 
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineSpacing = 3
 
+        let font: UIFont = {
+            switch fontFamily {
+            case .systemDefault: return .systemFont(ofSize: fontSize)
+            case .courier:       return UIFont(name: "Courier", size: fontSize) ?? .systemFont(ofSize: fontSize)
+            case .georgia:       return UIFont(name: "Georgia", size: fontSize) ?? .systemFont(ofSize: fontSize)
+            case .helvetica:     return UIFont(name: "Helvetica", size: fontSize) ?? .systemFont(ofSize: fontSize)
+            }
+        }()
+
         let attributes: [NSAttributedString.Key: Any] = [
-            .font:            UIFont(name: "Helvetica", size: fontSize) ?? .systemFont(ofSize: fontSize),
+            .font:            font,
             .foregroundColor: UIColor.black,
             .paragraphStyle:  paragraphStyle,
         ]
         let attributed = NSAttributedString(string: text, attributes: attributes)
 
-        let textRect = CGRect(x: margin, y: margin,
-                              width: pageWidth - margin * 2,
-                              height: pageHeight - margin * 2)
+        let textRect = CGRect(x: marginPts, y: marginPts,
+                              width: pageWidth - marginPts * 2,
+                              height: pageHeight - marginPts * 2)
 
         let pdfData = NSMutableData()
         UIGraphicsBeginPDFContextToData(pdfData, CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight), nil)

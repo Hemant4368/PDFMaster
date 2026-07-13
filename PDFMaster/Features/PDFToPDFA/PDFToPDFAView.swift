@@ -9,6 +9,7 @@ struct PDFToPDFAView: View {
     @State private var savedDocument: DocumentRecord?
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @AppStorage("pdfToPDFA.conformance") private var conformance: PDFAConformance = .pdfA1b
 
     var body: some View {
         Form {
@@ -19,10 +20,20 @@ struct PDFToPDFAView: View {
             }
 
             Section {
+                Picker("Conformance Level", selection: $conformance) {
+                    ForEach(PDFAConformance.allCases) { c in Text(c.rawValue).tag(c) }
+                }
+            } header: {
+                Text("Options")
+            } footer: {
+                Text("This is a best-effort conversion. Full PDF/A compliance requires professional tools.")
+            }
+
+            Section {
                 PrimaryButton(title: "Convert to PDF/A", systemImage: "archivebox") { convert() }
                     .disabled(sourceURL == nil)
             } footer: {
-                Text("Creates an archival-grade PDF with embedded metadata. For full PDF/A-1b conformance, validate with Adobe Acrobat or a dedicated validator.")
+                Text("Creates an archival-grade PDF with embedded metadata.")
             }
         }
         .navigationTitle("PDF to PDF/A")

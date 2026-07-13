@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import SwiftUI
+import UIKit
 
 struct WatermarkOptions: Equatable {
     var text: String = "SAMPLE"
@@ -193,4 +194,46 @@ enum PageRange: String, CaseIterable, Identifiable {
     case all    = "All Pages"
     case custom = "Custom Range"
     var id: String { rawValue }
+}
+
+// MARK: - Scan
+enum ScanColorMode: String, CaseIterable, Identifiable {
+    case color = "Color", grayscale = "Grayscale", blackAndWhite = "Black & White"
+    var id: String { rawValue }
+}
+
+// MARK: - PDF/A
+enum PDFAConformance: String, CaseIterable, Identifiable {
+    case pdfA1b = "PDF/A-1b", pdfA2b = "PDF/A-2b"
+    var id: String { rawValue }
+}
+
+// MARK: - Page Number Format
+enum PageNumberFormat: String, CaseIterable, Identifiable {
+    case arabic = "1, 2, 3", romanLower = "i, ii, iii", romanUpper = "I, II, III"
+    var id: String { rawValue }
+}
+
+// MARK: - Text Font
+enum TxtFontFamily: String, CaseIterable, Identifiable {
+    case systemDefault = "System", courier = "Courier", georgia = "Georgia", helvetica = "Helvetica"
+    var id: String { rawValue }
+}
+
+// MARK: - Signature
+enum SignatureInkColor: String, CaseIterable, Identifiable {
+    case black = "Black", blue = "Blue", red = "Red"
+    var id: String { rawValue }
+    var uiColor: UIColor {
+        switch self { case .black: .black; case .blue: .systemBlue; case .red: .systemRed }
+    }
+}
+
+// MARK: - Redaction
+enum RedactionFillColor: String, CaseIterable, Identifiable {
+    case black = "Black", white = "White", gray = "Gray"
+    var id: String { rawValue }
+    var uiColor: UIColor {
+        switch self { case .black: .black; case .white: .white; case .gray: .gray }
+    }
 }

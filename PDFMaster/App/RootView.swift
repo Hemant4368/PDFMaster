@@ -35,7 +35,7 @@ struct LockedView: View {
             Image(systemName: "lock.shield.fill")
                 .font(.system(size: 60))
                 .foregroundStyle(AppTheme.primary)
-            Text("PDF Master AI Locked")
+            Text("PDF Converter Locked")
                 .font(.title2.bold())
             PrimaryButton(title: "Unlock", systemImage: "faceid") {
                 Task { await appLockManager.authenticateIfNeeded(enabled: appLockEnabled) }

@@ -13,6 +13,8 @@ struct PDFFormsView: View {
     @State private var savedDocument: DocumentRecord?
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @AppStorage("forms.flattenOnExport") private var flattenOnExport = true
+    @AppStorage("forms.highlightFields") private var highlightFields = true
 
     var body: some View {
         VStack(spacing: 0) {

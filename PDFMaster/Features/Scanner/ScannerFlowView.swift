@@ -7,6 +7,8 @@ struct ScannerFlowView: View {
     @Environment(\.modelContext) private var modelContext
     @StateObject private var viewModel = ScannerViewModel()
     @State private var showScanner = true
+    @AppStorage("scanner.colorMode") private var colorMode: ScanColorMode = .color
+    @AppStorage("scanner.quality") private var quality: PDFQuality = .balanced
 
     var body: some View {
         NavigationStack {
@@ -78,6 +80,21 @@ struct ScannerFlowView: View {
             TextField("PDF name", text: $viewModel.title)
                 .textFieldStyle(.roundedBorder)
                 .padding(.horizontal, 20)
+            VStack(spacing: 8) {
+                Picker("Color Mode", selection: $colorMode) {
+                    ForEach(ScanColorMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                Picker("Quality", selection: $quality) {
+                    ForEach(PDFQuality.allCases) { q in
+                        Text(q.rawValue).tag(q)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+            .padding(.horizontal, 20)
             PrimaryButton(title: "Save in files", systemImage: "tray.and.arrow.down.fill") {
                 viewModel.save(modelContext: modelContext)
             }

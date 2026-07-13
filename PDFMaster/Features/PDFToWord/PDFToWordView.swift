@@ -9,7 +9,8 @@ struct PDFToWordView: View {
     @State private var showShare = false
     @State private var isWorking = false
     @State private var errorMessage: String?
-    @State private var options = PDFToWordOptions()
+    @AppStorage("pdfToWord.exportFormat") private var exportFormat = "RTF"
+    @AppStorage("pdfToWord.preserveParagraphs") private var preserveParagraphs = true
 
     var body: some View {
         Form {
@@ -21,17 +22,12 @@ struct PDFToWordView: View {
             }
 
             if sourceURL != nil {
-                Section("Options") {
-                    Picker("Output Format", selection: $options.outputFormat) {
-                        ForEach(WordOutputFormat.allCases) { fmt in
-                            Text(fmt.rawValue).tag(fmt)
-                        }
+                Section("Output Options") {
+                    Picker("Export Format", selection: $exportFormat) {
+                        Text("RTF").tag("RTF")
+                        Text("TXT").tag("TXT")
                     }
-                    Picker("Page Range", selection: $options.pageRange) {
-                        ForEach(PageRange.allCases) { r in
-                            Text(r.rawValue).tag(r)
-                        }
-                    }
+                    Toggle("Preserve paragraph breaks", isOn: $preserveParagraphs)
                 }
             }
 
@@ -50,12 +46,12 @@ struct PDFToWordView: View {
                     }
 
                     Button {
-                        if let url = exportFile() { exportURL = url; showShare = true }
+                        if let url = saveExtractedText() { exportURL = url; showShare = true }
                     } label: {
-                        Label("Export (\(options.outputFormat == .rtf ? "RTF" : "TXT"))", systemImage: "square.and.arrow.up")
+                        Label("Export (\(exportFormat))", systemImage: "square.and.arrow.up")
                     }
                 } footer: {
-                    Text(options.outputFormat == .rtf
+                    Text(exportFormat == "RTF"
                          ? "RTF files can be opened in Microsoft Word, Pages, and most word processors."
                          : "Plain text files can be opened in any text editor.")
                 }
@@ -85,15 +81,19 @@ struct PDFToWordView: View {
                 } else {
                     extractedText = try await OCRService.shared.recognizeText(inPDF: sourceURL, languages: ["en-US"])
                 }
+                if !preserveParagraphs {
+                    extractedText = extractedText.components(separatedBy: .newlines)
+                        .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                        .joined(separator: " ")
+                }
                 if extractedText.isEmpty { errorMessage = "No text found in this PDF." }
             } catch { errorMessage = error.localizedDescription }
         }
     }
 
-    private func exportFile() -> URL? {
+    private func saveExtractedText() -> URL? {
         guard let name = sourceURL?.deletingPathExtension().lastPathComponent else { return nil }
-        switch options.outputFormat {
-        case .rtf:
+        if exportFormat == "RTF" {
             let attributed = NSAttributedString(string: extractedText, attributes: [
                 .font: UIFont.systemFont(ofSize: 12)
             ])
@@ -104,7 +104,7 @@ struct PDFToWordView: View {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).rtf")
             try? rtfData.write(to: url, options: .atomic)
             return url
-        case .txt:
+        } else {
             guard let data = extractedText.data(using: .utf8) else { return nil }
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).txt")
             try? data.write(to: url, options: .atomic)

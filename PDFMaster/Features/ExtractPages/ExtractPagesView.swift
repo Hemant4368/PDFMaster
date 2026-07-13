@@ -11,6 +11,7 @@ struct ExtractPagesView: View {
     @State private var title = "Extracted Pages"
     @State private var savedDocument: DocumentRecord?
     @State private var errorMessage: String?
+    @AppStorage("extract.separateFiles") private var separateFiles = false
 
     var body: some View {
         Form {
@@ -38,6 +39,10 @@ struct ExtractPagesView: View {
                     .padding(.vertical, 4)
                 }
             }
+            Section("Output") {
+                Toggle("Export each page as a separate PDF", isOn: $separateFiles)
+            }
+
             Section {
                 PrimaryButton(title: "Export Selected Pages", systemImage: "doc.on.doc") { export(delete: false) }
                     .disabled(selected.isEmpty)
@@ -65,10 +70,19 @@ struct ExtractPagesView: View {
         guard let sourceURL else { return }
         Task {
             do {
-                let data = delete
-                    ? try await PDFProcessingService.shared.removePages(from: sourceURL, indexes: selected)
-                    : try await PDFProcessingService.shared.extractPages(from: sourceURL, indexes: Array(selected))
-                savedDocument = try await SaveDocumentHelper.savePDF(data: data, title: title, modelContext: modelContext)
+                if delete {
+                    let data = try await PDFProcessingService.shared.removePages(from: sourceURL, indexes: selected)
+                    savedDocument = try await SaveDocumentHelper.savePDF(data: data, title: title, modelContext: modelContext)
+                } else if separateFiles {
+                    let pages = try await PDFProcessingService.shared.splitSelectedPages(url: sourceURL, pageIndexes: Array(selected).sorted())
+                    let base = sourceURL.deletingPathExtension().lastPathComponent
+                    for (i, data) in pages.enumerated() {
+                        _ = try await SaveDocumentHelper.savePDF(data: data, title: "\(base) – Page \(selected.sorted()[i] + 1)", modelContext: modelContext)
+                    }
+                } else {
+                    let data = try await PDFProcessingService.shared.extractPages(from: sourceURL, indexes: Array(selected))
+                    savedDocument = try await SaveDocumentHelper.savePDF(data: data, title: title, modelContext: modelContext)
+                }
             } catch { errorMessage = error.localizedDescription }
         }
     }

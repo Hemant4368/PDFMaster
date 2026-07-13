@@ -19,7 +19,7 @@ final class AppLockManager: ObservableObject {
             return
         }
         do {
-            isUnlocked = try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "Unlock PDF Master AI")
+            isUnlocked = try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "Unlock PDF Converter")
         } catch {
             errorMessage = error.localizedDescription
             isUnlocked = false

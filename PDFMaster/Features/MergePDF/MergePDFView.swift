@@ -10,6 +10,7 @@ struct MergePDFView: View {
     @State private var savedDocument: DocumentRecord?
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @AppStorage("merge.sortAlpha") private var sortAlpha = false
 
     var body: some View {
         Form {
@@ -48,6 +49,10 @@ struct MergePDFView: View {
                 }
             }
             Section {
+                Toggle("Sort files alphabetically before merging", isOn: $sortAlpha)
+            }
+
+            Section {
                 PrimaryButton(title: "Merge PDFs", systemImage: "square.stack.3d.down.forward") { merge() }
                     .disabled(urls.count < 2)
             }
@@ -70,7 +75,8 @@ struct MergePDFView: View {
             isWorking = true
             defer { isWorking = false }
             do {
-                let data = try await PDFProcessingService.shared.merge(urls)
+                let sorted = sortAlpha ? urls.sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending } : urls
+                let data = try await PDFProcessingService.shared.merge(sorted)
                 savedDocument = try await SaveDocumentHelper.savePDF(data: data, title: title, modelContext: modelContext)
             } catch { errorMessage = error.localizedDescription }
         }

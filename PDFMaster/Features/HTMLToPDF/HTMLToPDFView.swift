@@ -11,13 +11,13 @@ struct HTMLToPDFView: View {
     @State private var title = "Web Page PDF"
 
     // Options
-    @State private var screenSize: HTMLScreenSize = .desktop
-    @State private var pageSize: HTMLPageSize = .a4
-    @State private var oneLongPage = false
-    @State private var orientation: PDFPageOrientation = .portrait
-    @State private var margin: PDFMarginSize = .none
-    @State private var blockAds = false
-    @State private var removePopups = false
+    @AppStorage("htmlToPDF.screenSize") private var screenSize: HTMLScreenSize = .desktop
+    @AppStorage("htmlToPDF.pageSize") private var pageSize: HTMLPageSize = .a4
+    @AppStorage("htmlToPDF.oneLongPage") private var oneLongPage = false
+    @AppStorage("htmlToPDF.orientation") private var orientation: PDFPageOrientation = .portrait
+    @AppStorage("htmlToPDF.margin") private var margin: PDFMarginSize = .none
+    @AppStorage("htmlToPDF.blockAds") private var blockAds = false
+    @AppStorage("htmlToPDF.removePopups") private var removePopups = false
 
     @State private var savedDocument: DocumentRecord?
     @State private var isWorking = false

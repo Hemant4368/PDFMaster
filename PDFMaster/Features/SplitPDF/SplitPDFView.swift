@@ -29,20 +29,20 @@ struct SplitPDFView: View {
     @State private var showPicker = false
     @State private var pageCount = 0
 
-    @State private var topMode: SplitTopMode = .range
-    @State private var rangeSubMode: SplitRangeSubMode = .custom
-    @State private var pageSubMode: SplitPageSubMode = .all
+    @AppStorage("split.topMode") private var topMode: SplitTopMode = .range
+    @AppStorage("split.rangeSubMode") private var rangeSubMode: SplitRangeSubMode = .custom
+    @AppStorage("split.pageSubMode") private var pageSubMode: SplitPageSubMode = .all
 
     @State private var customRanges: [String] = [""]
     @State private var fixedEveryN: Int = 1
 
     @State private var selectedPages = Set<Int>()
 
-    @State private var maxSizeValue: Double = 5
-    @State private var sizeUnit: SizeUnit = .mb
-    @State private var allowCompression = false
+    @AppStorage("split.maxSizeValue") private var maxSizeValue: Double = 5
+    @AppStorage("split.sizeUnit") private var sizeUnit: SizeUnit = .mb
+    @AppStorage("split.allowCompression") private var allowCompression = false
 
-    @State private var mergeIntoOne = false
+    @AppStorage("split.mergeIntoOne") private var mergeIntoOne = false
     @State private var outputTitle = "Split PDF"
 
     @State private var savedParts: [DocumentRecord] = []

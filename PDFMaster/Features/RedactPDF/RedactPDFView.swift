@@ -17,6 +17,16 @@ struct RedactPDFView: View {
     @State private var savedDocument: DocumentRecord?
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var previewDocument: PDFDocument?
+    @State private var isPreparingPreview = false
+    @AppStorage("redact.fillColor") private var fillColor: RedactionFillColor = .black
+
+    private var previewHash: Int {
+        var h = Hasher()
+        h.combine(regions.count)
+        for r in regions { h.combine(r.pageIndex); h.combine(r.rect.origin.x); h.combine(r.rect.origin.y); h.combine(r.rect.width); h.combine(r.rect.height) }
+        return h.finalize()
+    }
 
     var body: some View {
         Form {
@@ -26,12 +36,19 @@ struct RedactPDFView: View {
                 TextField("Output name", text: $title)
             }
 
-            if pageCount > 0 {
-                if let url = sourceURL {
-                    Section("Preview") {
-                        PDFKitView(url: url)
-                            .frame(height: 260)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+            if pageCount > 0, let url = sourceURL {
+                Section("Preview") {
+                    LivePDFPreview(document: previewDocument, originalURL: url, isProcessing: isPreparingPreview)
+                }
+
+                Section {
+                    Picker("Redaction Color", selection: $fillColor) {
+                        ForEach(RedactionFillColor.allCases) { c in
+                            HStack {
+                                Circle().fill(Color(c.uiColor)).frame(width: 16, height: 16)
+                                Text(c.rawValue)
+                            }.tag(c)
+                        }
                     }
                 }
 
@@ -56,7 +73,7 @@ struct RedactPDFView: View {
                             HStack {
                                 Text("Page \(r.pageIndex + 1)")
                                 Spacer()
-                                Text("(\(Int(r.rect.minX)), \(Int(r.rect.minY))) \(Int(r.rect.width))×\(Int(r.rect.height))")
+                                Text("(\(Int(r.rect.minX)), \(Int(r.rect.minY))) \(Int(r.rect.width))\u{00D7}\(Int(r.rect.height))")
                                     .foregroundStyle(.secondary)
                                     .font(.caption)
                             }
@@ -82,6 +99,7 @@ struct RedactPDFView: View {
                 pageIndex = 0
             }
         }
+        .task(id: previewHash) { await generatePreview() }
         .navigationDestination(item: $savedDocument) { PDFViewerView(document: $0) }
         .overlay { if isWorking { LoadingOverlay(title: "Applying Redactions") } }
         .alert("Redact PDF", isPresented: .constant(errorMessage != nil)) {
@@ -107,6 +125,30 @@ struct RedactPDFView: View {
             return
         }
         regions.append((pageIndex: pageIndex, rect: CGRect(x: x, y: y, width: w, height: h)))
+    }
+
+    private func generatePreview() async {
+        guard let url = sourceURL, !regions.isEmpty else { previewDocument = nil; return }
+        isPreparingPreview = true
+        defer { isPreparingPreview = false }
+        do {
+            let tempDoc = firstPageOnly(url: url)
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
+            try tempDoc?.dataRepresentation()?.write(to: tempURL)
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+            let previewRegions = regions.filter { $0.pageIndex == 0 }.map { (pageIndex: 0, rect: $0.rect) }
+            let data = try await PDFProcessingService.shared.redact(url: tempURL, regions: previewRegions)
+            previewDocument = PDFDocument(data: data)
+        } catch {
+            previewDocument = nil
+        }
+    }
+
+    private func firstPageOnly(url: URL) -> PDFDocument? {
+        guard let doc = PDFDocument(url: url), let page = doc.page(at: 0) else { return nil }
+        let single = PDFDocument()
+        single.insert(page, at: 0)
+        return single
     }
 
     private func applyRedactions() {

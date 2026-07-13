@@ -4,7 +4,9 @@ struct WordToPDFView: View {
     @State private var sourceURL: URL?
     @State private var showPicker = false
     @State private var showPreview = false
-    @State private var options = OfficeConversionOptions()
+    @AppStorage("wordToPDF.pageSize") private var pageSize: PDFPageSize = .a4
+    @AppStorage("wordToPDF.orientation") private var orientation: PDFPageOrientation = .portrait
+    @AppStorage("wordToPDF.margin") private var margin: PDFMarginSize = .small
 
     var body: some View {
         Form {
@@ -15,22 +17,15 @@ struct WordToPDFView: View {
             }
 
             if sourceURL != nil {
-                Section("Options") {
-                    TextField("Output Name", text: $options.outputName)
-                    Picker("Orientation", selection: $options.orientation) {
-                        ForEach(PDFPageOrientation.allCases) { orient in
-                            Text(orient.rawValue).tag(orient)
-                        }
+                Section("Output Options") {
+                    Picker("Page Size", selection: $pageSize) {
+                        ForEach(PDFPageSize.allCases) { s in Text(s.rawValue).tag(s) }
                     }
-                    Picker("Quality", selection: $options.quality) {
-                        ForEach(PDFQuality.allCases) { q in
-                            Text(q.rawValue).tag(q)
-                        }
+                    Picker("Orientation", selection: $orientation) {
+                        ForEach(PDFPageOrientation.allCases) { o in Text(o.rawValue).tag(o) }
                     }
-                    Picker("Margin", selection: $options.margin) {
-                        ForEach(PDFMarginSize.allCases) { m in
-                            Text(m.rawValue).tag(m)
-                        }
+                    Picker("Margin", selection: $margin) {
+                        ForEach(PDFMarginSize.allCases) { m in Text(m.rawValue).tag(m) }
                     }
                 }
 
@@ -61,8 +56,9 @@ struct WordToPDFView: View {
             Text("How to convert to PDF:").font(.caption).bold()
             Text("1. Tap \"Preview & Convert\" to open the document")
             Text("2. Tap the Share button (↑) in the top right")
-            Text("3. Select Print → pinch out on the preview")
-            Text("4. Tap Share (↑) again → Save to Files")
+            Text("3. Select Print \u{2192} pinch out on the preview")
+            Text("4. In the Print dialog, set page size to \(pageSize.rawValue) and orientation to \(orientation.rawValue)")
+            Text("5. Tap Share (↑) again \u{2192} Save to Files")
         }
         .font(.caption)
         .foregroundStyle(.secondary)

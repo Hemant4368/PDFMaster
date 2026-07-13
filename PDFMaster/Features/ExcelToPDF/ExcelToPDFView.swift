@@ -4,7 +4,9 @@ struct ExcelToPDFView: View {
     @State private var sourceURL: URL?
     @State private var showPicker = false
     @State private var showPreview = false
-    @State private var options = OfficeConversionOptions()
+    @AppStorage("excelToPDF.pageSize") private var pageSize: PDFPageSize = .a4
+    @AppStorage("excelToPDF.orientation") private var orientation: PDFPageOrientation = .landscape
+    @AppStorage("excelToPDF.fitToWidth") private var fitToWidth = true
 
     var body: some View {
         Form {
@@ -15,23 +17,14 @@ struct ExcelToPDFView: View {
             }
 
             if sourceURL != nil {
-                Section("Options") {
-                    TextField("Output Name", text: $options.outputName)
-                    Picker("Orientation", selection: $options.orientation) {
-                        ForEach(PDFPageOrientation.allCases) { orient in
-                            Text(orient.rawValue).tag(orient)
-                        }
+                Section("Output Options") {
+                    Picker("Page Size", selection: $pageSize) {
+                        ForEach(PDFPageSize.allCases) { s in Text(s.rawValue).tag(s) }
                     }
-                    Picker("Quality", selection: $options.quality) {
-                        ForEach(PDFQuality.allCases) { q in
-                            Text(q.rawValue).tag(q)
-                        }
+                    Picker("Orientation", selection: $orientation) {
+                        ForEach(PDFPageOrientation.allCases) { o in Text(o.rawValue).tag(o) }
                     }
-                    Picker("Margin", selection: $options.margin) {
-                        ForEach(PDFMarginSize.allCases) { m in
-                            Text(m.rawValue).tag(m)
-                        }
-                    }
+                    Toggle("Fit all columns to one page", isOn: $fitToWidth)
                 }
 
                 Section {
@@ -61,8 +54,9 @@ struct ExcelToPDFView: View {
             Text("How to convert to PDF:").font(.caption).bold()
             Text("1. Tap \"Preview & Convert\" to open the spreadsheet")
             Text("2. Tap the Share button (↑) in the top right")
-            Text("3. Select Print → pinch out on the preview")
-            Text("4. Tap Share (↑) again → Save to Files")
+            Text("3. Select Print \u{2192} pinch out on the preview")
+            Text("4. In Print dialog: orientation = \(orientation.rawValue)\(fitToWidth ? ", enable Fit to Width" : "")")
+            Text("5. Tap Share (↑) again \u{2192} Save to Files")
         }
         .font(.caption)
         .foregroundStyle(.secondary)

@@ -31,7 +31,7 @@ struct ShareToolPickerView: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color(uiColor: .label))
                         .lineLimit(2)
-                    Text("Open with PDF Master AI")
+                    Text("Open with PDF Converter")
                         .font(.caption)
                         .foregroundStyle(Color(uiColor: .secondaryLabel))
                 }

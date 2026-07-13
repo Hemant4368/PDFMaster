@@ -10,6 +10,10 @@ struct OCRToolView: View {
     @State private var showLanguagePicker = false
     @State private var recognizedText = ""
     @State private var title = "OCR Text"
+    @State private var exportURL: URL?
+    @State private var showShare = false
+    @AppStorage("ocr.outputFormat") private var outputFormat = "Searchable PDF"
+    @AppStorage("ocr.languages") private var languagesCSV = "en-US"
     @State private var selectedLanguages: Set<OCRLanguage> = [.english]
     @State private var isWorking = false
     @State private var errorMessage: String?
@@ -75,6 +79,13 @@ struct OCRToolView: View {
                 Text("Select one or more languages that appear in your PDF for best accuracy.")
             }
 
+            Section("Output") {
+                Picker("Output Format", selection: $outputFormat) {
+                    Text("Searchable PDF").tag("Searchable PDF")
+                    Text("Text File (.txt)").tag("Text File (.txt)")
+                }
+            }
+
             Section {
                 PrimaryButton(title: "Recognize Text", systemImage: "text.viewfinder") { recognize() }
                     .disabled(sourceURL == nil || selectedLanguages.isEmpty)
@@ -99,8 +110,15 @@ struct OCRToolView: View {
                     } label: {
                         Label("Copy Text", systemImage: "doc.on.doc")
                     }
+                    if outputFormat == "Text File (.txt)" {
+                        Button {
+                            if let url = saveAsTextFile() { exportURL = url; showShare = true }
+                        } label: {
+                            Label("Export as .txt", systemImage: "square.and.arrow.up")
+                        }
+                    }
                     ShareLink(item: recognizedText) {
-                        Label("Export Text", systemImage: "square.and.arrow.up")
+                        Label("Share Text", systemImage: "square.and.arrow.up")
                     }
                     Button("Save to OCR History") {
                         let langs = sortedLanguages.map(\.name).joined(separator: ", ")
@@ -111,7 +129,13 @@ struct OCRToolView: View {
             }
         }
         .navigationTitle("OCR Scanner")
-        .task { if let url = shareInbox.consumeURL(for: .ocr) { sourceURL = url } }
+        .task {
+            if let url = shareInbox.consumeURL(for: .ocr) { sourceURL = url }
+            selectedLanguages = Set(languagesCSV.components(separatedBy: ",").compactMap { code in OCRLanguage.all.first(where: { $0.code == code }) })
+        }
+        .onChange(of: selectedLanguages) { _, langs in
+            languagesCSV = langs.map(\.code).joined(separator: ",")
+        }
         .sheet(isPresented: $showPicker) {
             PDFSourcePickerSheet { urls in
                 sourceURL = urls.first
@@ -122,10 +146,21 @@ struct OCRToolView: View {
         .sheet(isPresented: $showLanguagePicker) {
             OCRLanguagePickerSheet(selectedLanguages: $selectedLanguages)
         }
+        .sheet(isPresented: $showShare) {
+            if let url = exportURL { ShareSheet(items: [url]) }
+        }
         .overlay { if isWorking { LoadingOverlay(title: "Recognizing text") } }
         .alert("OCR", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
+    }
+
+    private func saveAsTextFile() -> URL? {
+        guard let name = sourceURL?.deletingPathExtension().lastPathComponent,
+              let data = recognizedText.data(using: .utf8) else { return nil }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).txt")
+        try? data.write(to: url, options: .atomic)
+        return url
     }
 
     private func recognize() {

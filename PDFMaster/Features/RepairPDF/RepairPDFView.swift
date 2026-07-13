@@ -9,6 +9,7 @@ struct RepairPDFView: View {
     @State private var savedDocument: DocumentRecord?
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @AppStorage("repair.keepMetadata") private var keepMetadata = true
 
     var body: some View {
         Form {
@@ -16,6 +17,10 @@ struct RepairPDFView: View {
                 Button(sourceURL?.lastPathComponent ?? "Choose PDF") { showPicker = true }
                 if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 TextField("Output name", text: $title)
+            }
+
+            Section("Options") {
+                Toggle("Preserve document metadata", isOn: $keepMetadata)
             }
 
             Section {

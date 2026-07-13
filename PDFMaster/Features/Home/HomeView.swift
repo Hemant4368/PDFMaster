@@ -81,7 +81,7 @@ struct HomeView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .alert("PDF Master AI", isPresented: .constant(viewModel.errorMessage != nil)) {
+            .alert("PDF Converter", isPresented: .constant(viewModel.errorMessage != nil)) {
                 Button("OK") { viewModel.errorMessage = nil }
             } message: {
                 Text(viewModel.errorMessage ?? "")

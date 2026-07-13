@@ -7,12 +7,14 @@ struct CompressPDFView: View {
     @EnvironmentObject private var shareInbox: ShareInbox
     @State private var sourceURL: URL?
     @State private var showPicker = false
-    @State private var quality: PDFQuality = .low
+    @AppStorage("compress.quality") private var quality: PDFQuality = .balanced
     @State private var title = "Compressed PDF"
     @State private var originalSize: Int64 = 0
     @State private var savedDocument: DocumentRecord?
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var previewDocument: PDFDocument?
+    @State private var isPreparingPreview = false
 
     private var originalSizeLabel: String {
         originalSize > 0 ? ByteCountFormatter.string(fromByteCount: originalSize, countStyle: .file) : "—"
@@ -39,6 +41,12 @@ struct CompressPDFView: View {
                     .foregroundStyle(.secondary)
             }
 
+            if let sourceURL {
+                Section("Preview (\(quality.rawValue))") {
+                    LivePDFPreview(document: previewDocument, originalURL: sourceURL, isProcessing: isPreparingPreview)
+                }
+            }
+
             Section {
                 PrimaryButton(title: "Compress PDF", systemImage: "arrow.down.to.line.compact") { compress() }
                     .disabled(sourceURL == nil)
@@ -46,6 +54,7 @@ struct CompressPDFView: View {
         }
         .navigationTitle("Compress PDF")
         .task { if let url = shareInbox.consumeURL(for: .compress) { sourceURL = url } }
+        .task(id: quality) { await generatePreview() }
         .sheet(isPresented: $showPicker) {
             PDFSourcePickerSheet { urls in
                 sourceURL = urls.first
@@ -69,6 +78,29 @@ struct CompressPDFView: View {
         case .balanced: "Good quality with moderate size reduction"
         case .high:     "Near-original quality — minimal size reduction"
         }
+    }
+
+    private func generatePreview() async {
+        guard let url = sourceURL else { return }
+        isPreparingPreview = true
+        defer { isPreparingPreview = false }
+        do {
+            let tempDoc = firstPageOnly(url: url)
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
+            try tempDoc?.dataRepresentation()?.write(to: tempURL)
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+            let data = try await PDFProcessingService.shared.compress(url: tempURL, quality: quality)
+            previewDocument = PDFDocument(data: data)
+        } catch {
+            previewDocument = PDFDocument(url: url)
+        }
+    }
+
+    private func firstPageOnly(url: URL) -> PDFDocument? {
+        guard let doc = PDFDocument(url: url), let page = doc.page(at: 0) else { return nil }
+        let single = PDFDocument()
+        single.insert(page, at: 0)
+        return single
     }
 
     private func compress() {

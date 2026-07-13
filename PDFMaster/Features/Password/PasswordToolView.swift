@@ -11,6 +11,7 @@ struct PasswordToolView: View {
     @State private var title = "Secure PDF"
     @State private var savedDocument: DocumentRecord?
     @State private var errorMessage: String?
+    @AppStorage("password.encryption") private var encryption = "AES-256"
 
     var body: some View {
         Form {
@@ -21,6 +22,14 @@ struct PasswordToolView: View {
                 SecureField("Password", text: $password)
                 if !removePassword { SecureField("Confirm Password", text: $confirm) }
                 TextField("Output name", text: $title)
+            }
+            if !removePassword {
+                Section("Encryption") {
+                    Picker("Encryption Level", selection: $encryption) {
+                        Text("AES-128").tag("AES-128")
+                        Text("AES-256").tag("AES-256")
+                    }
+                }
             }
             Section {
                 PrimaryButton(title: removePassword ? "Remove Password" : "Encrypt PDF", systemImage: "lock.shield") { run() }

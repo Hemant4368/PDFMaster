@@ -1,3 +1,4 @@
+import PDFKit
 import PhotosUI
 import SwiftData
 import SwiftUI
@@ -15,15 +16,29 @@ struct ImageToPDFView: View {
     @State private var showFilePicker = false
     @State private var entries: [ImageEntry] = []
     @State private var title = "Images PDF"
-    @State private var quality: PDFQuality = .balanced
-    @State private var orientation: PDFPageOrientation = .portrait
-    @State private var pageSize: PDFPageSize = .a4
-    @State private var margin: PDFMarginSize = .none
-    @State private var mergeIntoOne = true
+    @AppStorage("imageToPDF.quality") private var quality: PDFQuality = .balanced
+    @AppStorage("imageToPDF.orientation") private var orientation: PDFPageOrientation = .portrait
+    @AppStorage("imageToPDF.pageSize") private var pageSize: PDFPageSize = .a4
+    @AppStorage("imageToPDF.margin") private var margin: PDFMarginSize = .none
+    @AppStorage("imageToPDF.mergeIntoOne") private var mergeIntoOne = true
     @State private var savedDocument: DocumentRecord?
     @State private var savedParts: [DocumentRecord] = []
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var previewDocument: PDFDocument?
+    @State private var isPreparingPreview = false
+
+    private var previewHash: Int {
+        var h = Hasher()
+        h.combine(entries.count)
+        h.combine(entries.map(\.rotation))
+        h.combine(quality)
+        h.combine(orientation)
+        h.combine(pageSize)
+        h.combine(margin)
+        h.combine(mergeIntoOne)
+        return h.finalize()
+    }
 
     var body: some View {
         Form {
@@ -80,6 +95,27 @@ struct ImageToPDFView: View {
                 Toggle("Merge all images into one PDF", isOn: $mergeIntoOne)
             }
 
+            if !entries.isEmpty {
+                Section("Preview") {
+                    ZStack {
+                        if let previewDocument {
+                            PDFKitDocumentView(document: previewDocument, autoScales: true)
+                        } else {
+                            Color(.secondarySystemBackground)
+                                .overlay { ProgressView() }
+                        }
+                        if isPreparingPreview && previewDocument != nil {
+                            VStack {
+                                HStack { Spacer(); ProgressView().padding(6).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6)) }.padding(8)
+                                Spacer()
+                            }
+                        }
+                    }
+                    .frame(height: 320)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            }
+
             Section {
                 PrimaryButton(title: "Convert to PDF", systemImage: "doc.richtext") { convert() }
                     .disabled(entries.isEmpty || title.isEmpty)
@@ -110,6 +146,7 @@ struct ImageToPDFView: View {
             }
         }
         .onChange(of: selectedItems) { _, newItems in loadImages(newItems) }
+        .task(id: previewHash) { await generatePreview() }
         .sheet(isPresented: $showFilePicker) {
             DocumentPickerView(contentTypes: [.image], allowsMultipleSelection: true) { urls in
                 loadFromFiles(urls)
@@ -229,6 +266,23 @@ struct ImageToPDFView: View {
                     savedParts = records
                 }
             } catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    // MARK: – Preview
+
+    private func generatePreview() async {
+        guard !entries.isEmpty else { previewDocument = nil; return }
+        isPreparingPreview = true
+        defer { isPreparingPreview = false }
+        do {
+            let images = entries.map { rotated($0.image, by: $0.rotation) }
+            let data = try await PDFProcessingService.shared.makePDF(
+                from: images, quality: quality, orientation: orientation, pageSize: pageSize, margin: margin
+            )
+            previewDocument = PDFDocument(data: data)
+        } catch {
+            previewDocument = nil
         }
     }
 

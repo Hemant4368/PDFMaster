@@ -11,6 +11,8 @@ struct ReorderPagesView: View {
     @State private var title = "Reordered PDF"
     @State private var savedDocument: DocumentRecord?
     @State private var errorMessage: String?
+    @AppStorage("reorder.showThumbnails") private var showThumbnails = true
+    @AppStorage("reorder.reverseOnLoad") private var reverseOnLoad = false
 
     var body: some View {
         Form {
@@ -19,10 +21,14 @@ struct ReorderPagesView: View {
                 if let sourceURL { SelectedPDFPreview(url: sourceURL) }
                 TextField("New PDF name", text: $title)
             }
+            Section("Options") {
+                Toggle("Show page thumbnails", isOn: $showThumbnails)
+                Toggle("Reverse order on load", isOn: $reverseOnLoad)
+            }
             Section("Drag to reorder") {
                 ForEach(order, id: \.self) { pageIndex in
                     HStack {
-                        if thumbnails.indices.contains(pageIndex) {
+                        if showThumbnails, thumbnails.indices.contains(pageIndex) {
                             Image(uiImage: thumbnails[pageIndex])
                                 .resizable()
                                 .scaledToFill()
@@ -35,6 +41,18 @@ struct ReorderPagesView: View {
                 }
                 .onMove { order.move(fromOffsets: $0, toOffset: $1) }
             }
+            Section("Quick Sort") {
+                Button("Reverse Order") {
+                    withAnimation { order.reverse() }
+                }
+                Button("Odd Pages First") {
+                    withAnimation { order = order.filter { $0 % 2 == 0 } + order.filter { $0 % 2 != 0 } }
+                }
+                Button("Even Pages First") {
+                    withAnimation { order = order.filter { $0 % 2 != 0 } + order.filter { $0 % 2 == 0 } }
+                }
+            }
+
             Section {
                 PrimaryButton(title: "Save Reordered PDF", systemImage: "arrow.up.arrow.down.square") { save() }
                     .disabled(sourceURL == nil || order.isEmpty)
@@ -57,6 +75,7 @@ struct ReorderPagesView: View {
     private func loadPages() {
         guard let sourceURL, let pdf = PDFDocument(url: sourceURL) else { return }
         order = Array(0..<pdf.pageCount)
+        if reverseOnLoad { order.reverse() }
         thumbnails = order.compactMap { pdf.page(at: $0)?.thumbnail(of: CGSize(width: 92, height: 120), for: .cropBox) }
     }
 
